@@ -1,0 +1,95 @@
+contract_id: retail.vendas
+version: "1.0"
+owner: "dominio-vendas"
+description: "Eventos de transação de venda publicados no tópico retail.vendas"
+
+sla:
+  freshness_minutes: 30       # dados devem chegar em até 30 minutos
+  min_daily_volume: 1000      # mínimo de eventos por dia
+  max_null_pct: 0.02          # máximo 2% de nulos em campos críticos
+
+schema:
+  - field: venda_id
+    type: STRING
+    nullable: false
+    unique: true
+    description: "Identificador único da transação (UUID)"
+
+  - field: timestamp
+    type: STRING
+    nullable: false
+    description: "Timestamp do evento no formato yyyy-MM-ddTHH:mm:ss"
+
+  - field: loja_id
+    type: STRING
+    nullable: false
+    description: "Identificador da loja onde ocorreu a venda"
+    allowed_values: [SP-001, SP-002, RJ-001, MG-001, RS-001, PR-001, BA-001]
+
+  - field: produto_id
+    type: INTEGER
+    nullable: false
+    min: 0
+    max: 499
+    description: "Identificador sequencial do produto (0 a 499)"
+
+  - field: cliente_id
+    type: STRING
+    nullable: false
+    description: "Identificador do cliente (UUID com cardinalidade 10000)"
+
+  - field: quantidade
+    type: DOUBLE
+    nullable: false
+    min: 1
+    max: 10
+    description: "Quantidade de itens vendidos"
+
+  - field: preco_unitario
+    type: DOUBLE
+    nullable: false
+    min: 5.0
+    max: 2000.0
+    description: "Preço unitário do produto"
+
+  - field: desconto_pct
+    type: DOUBLE
+    nullable: false
+    min: 0.0
+    max: 0.30
+    description: "Percentual de desconto aplicado (0 a 30%)"
+
+  - field: canal
+    type: STRING
+    nullable: false
+    allowed_values: [fisico, online]
+    description: "Canal de venda"
+
+  - field: uf
+    type: STRING
+    nullable: false
+    allowed_values: [SP, RJ, MG, RS, PR, BA]
+    description: "Estado onde ocorreu a venda"
+
+  - field: schema_version
+    type: STRING
+    nullable: false
+    pattern: "^[0-9]+\\.[0-9]+$"
+    description: "Versão do schema do evento"
+
+quality_rules:
+  - rule: "preco_unitario > 0"
+    severity: CRITICAL
+    description: "Preço unitário deve ser positivo"
+
+  - rule: "quantidade > 0"
+    severity: CRITICAL
+    description: "Quantidade vendida deve ser positiva"
+
+  - rule: "desconto_pct BETWEEN 0 AND 0.30"
+    severity: CRITICAL
+    description: "Desconto não pode ultrapassar 30%"
+
+  - rule: "canal IN ('fisico', 'online')"
+    severity: WARNING
+    description: "Canal deve ser fisico ou online"

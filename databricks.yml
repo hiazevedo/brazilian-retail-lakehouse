@@ -40,3 +40,30 @@ resources:
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/gold/03_gold_basic
             source: WORKSPACE
+
+    contract_registry:
+      name: "[retail] 04 - Contract Registry"
+      tasks:
+        - task_key: contract_registry
+          description: "Lê os YAMLs de contratos e popula contracts.registry"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/04_contract_registry
+            source: WORKSPACE
+
+    contract_validator:
+      name: "[retail] 05 - Contract Validator"
+      tasks:
+        - task_key: contract_validator
+          description: "Valida dados Silver contra os contratos ativos e registra violações"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/05_contract_validator
+            source: WORKSPACE
+
+    contract_monitor:
+      name: "[retail] 06 - Contract Monitor"
+      tasks:
+        - task_key: contract_monitor
+          description: "Dashboard analítico de conformidade de data contracts"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/06_contract_monitor
+            source: WORKSPACE

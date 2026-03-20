@@ -1,0 +1,69 @@
+contract_id: retail.clientes
+version: "1.0"
+owner: "dominio-clientes"
+description: "Eventos de cadastro e atualização de clientes publicados no tópico retail.clientes"
+
+sla:
+  freshness_minutes: 120      # clientes têm SLA mais relaxado — eventos raros
+  min_daily_volume: 60        # mínimo de eventos por dia
+  max_null_pct: 0.01          # clientes exigem alta qualidade de cadastro
+
+schema:
+  - field: cliente_id
+    type: STRING
+    nullable: false
+    description: "Identificador único do cliente (UUID com cardinalidade 10000)"
+
+  - field: timestamp
+    type: STRING
+    nullable: false
+    description: "Timestamp do evento no formato yyyy-MM-ddTHH:mm:ss"
+
+  - field: tipo_evento
+    type: STRING
+    nullable: false
+    allowed_values: [cadastro, atualizacao, inativacao]
+    description: "Tipo do evento de cliente"
+
+  - field: cidade
+    type: STRING
+    nullable: true
+    allowed_values: [São Paulo, Rio de Janeiro, Belo Horizonte, Porto Alegre, Curitiba, Salvador, Fortaleza]
+    description: "Cidade do cliente"
+
+  - field: uf
+    type: STRING
+    nullable: false
+    allowed_values: [SP, RJ, MG, RS, PR, BA, CE]
+    description: "Estado do cliente"
+
+  - field: faixa_renda
+    type: STRING
+    nullable: true
+    allowed_values: [A, B, C, D, E]
+    description: "Faixa de renda do cliente (A=maior, E=menor)"
+
+  - field: canal_preferido
+    type: STRING
+    nullable: true
+    allowed_values: [fisico, online, ambos]
+    description: "Canal de compra preferido do cliente"
+
+  - field: schema_version
+    type: STRING
+    nullable: false
+    pattern: "^[0-9]+\\.[0-9]+$"
+    description: "Versão do schema do evento"
+
+quality_rules:
+  - rule: "cliente_id IS NOT NULL"
+    severity: CRITICAL
+    description: "Todo evento de cliente deve ter identificador"
+
+  - rule: "tipo_evento IN ('cadastro', 'atualizacao', 'inativacao')"
+    severity: CRITICAL
+    description: "Tipo de evento deve ser um valor conhecido"
+
+  - rule: "uf IN ('SP', 'RJ', 'MG', 'RS', 'PR', 'BA', 'CE')"
+    severity: WARNING
+    description: "UF deve ser um estado coberto pela rede de lojas"

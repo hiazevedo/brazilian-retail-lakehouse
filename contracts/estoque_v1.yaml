@@ -1,0 +1,73 @@
+contract_id: retail.estoque
+version: "1.0"
+owner: "dominio-estoque"
+description: "Eventos de movimentação de estoque publicados no tópico retail.estoque"
+
+sla:
+  freshness_minutes: 60       # estoque tem SLA mais relaxado que vendas
+  min_daily_volume: 300       # mínimo de eventos por dia
+  max_null_pct: 0.01
+
+schema:
+  - field: evento_id
+    type: STRING
+    nullable: false
+    unique: true
+    description: "Identificador único do evento de estoque (UUID)"
+
+  - field: timestamp
+    type: STRING
+    nullable: false
+    description: "Timestamp do evento no formato yyyy-MM-ddTHH:mm:ss"
+
+  - field: loja_id
+    type: STRING
+    nullable: false
+    allowed_values: [SP-001, SP-002, RJ-001, MG-001, RS-001, PR-001, BA-001]
+    description: "Identificador da loja"
+
+  - field: produto_id
+    type: INTEGER
+    nullable: false
+    min: 0
+    max: 499
+    description: "Identificador sequencial do produto"
+
+  - field: tipo_movimento
+    type: STRING
+    nullable: false
+    allowed_values: [saida, entrada, ajuste, transferencia]
+    description: "Tipo de movimentação de estoque"
+
+  - field: quantidade
+    type: DOUBLE
+    nullable: false
+    min: 1
+    max: 50
+    description: "Quantidade movimentada"
+
+  - field: estoque_atual
+    type: DOUBLE
+    nullable: false
+    min: 0
+    max: 500
+    description: "Posição atual do estoque após o movimento"
+
+  - field: schema_version
+    type: STRING
+    nullable: false
+    pattern: "^[0-9]+\\.[0-9]+$"
+    description: "Versão do schema do evento"
+
+quality_rules:
+  - rule: "quantidade > 0"
+    severity: CRITICAL
+    description: "Quantidade movimentada deve ser positiva"
+
+  - rule: "estoque_atual >= 0"
+    severity: CRITICAL
+    description: "Estoque não pode ser negativo"
+
+  - rule: "tipo_movimento IN ('saida', 'entrada', 'ajuste', 'transferencia')"
+    severity: WARNING
+    description: "Tipo de movimento deve ser um valor conhecido"

@@ -1,0 +1,72 @@
+contract_id: retail.pagamentos
+version: "1.0"
+owner: "dominio-pagamentos"
+description: "Eventos de pagamento publicados no tópico retail.pagamentos"
+
+sla:
+  freshness_minutes: 30       # pagamentos têm SLA igual a vendas — crítico
+  min_daily_volume: 1000      # mínimo de eventos por dia
+  max_null_pct: 0.00          # pagamentos exigem qualidade máxima — zero nulos
+
+schema:
+  - field: pagamento_id
+    type: STRING
+    nullable: false
+    unique: true
+    description: "Identificador único do pagamento (UUID)"
+
+  - field: venda_id
+    type: STRING
+    nullable: false
+    description: "Referência à venda associada (UUID)"
+
+  - field: timestamp
+    type: STRING
+    nullable: false
+    description: "Timestamp do evento no formato yyyy-MM-ddTHH:mm:ss"
+
+  - field: metodo
+    type: STRING
+    nullable: false
+    allowed_values: [pix, debito, credito, dinheiro]
+    description: "Método de pagamento utilizado"
+
+  - field: status
+    type: STRING
+    nullable: false
+    allowed_values: [aprovado, recusado, estorno]
+    description: "Status do pagamento"
+
+  - field: parcelas
+    type: INTEGER
+    nullable: true
+    min: 1
+    max: 12
+    description: "Número de parcelas (apenas para crédito)"
+
+  - field: schema_version
+    type: STRING
+    nullable: false
+    pattern: "^[0-9]+\\.[0-9]+$"
+    description: "Versão do schema do evento"
+
+quality_rules:
+  - rule: "pagamento_id IS NOT NULL"
+    severity: CRITICAL
+    description: "Todo pagamento deve ter identificador único"
+
+  - rule: "venda_id IS NOT NULL"
+    severity: CRITICAL
+    description: "Todo pagamento deve estar associado a uma venda"
+
+  - rule: "status IN ('aprovado', 'recusado', 'estorno')"
+    severity: CRITICAL
+    description: "Status do pagamento deve ser um valor conhecido"
+
+  - rule: "metodo IN ('pix', 'debito', 'credito', 'dinheiro')"
+    severity: WARNING
+    description: "Método de pagamento deve ser um valor conhecido"
+
+  - rule: "parcelas BETWEEN 1 AND 12"
+    severity: WARNING
+    description: "Número de parcelas deve estar entre 1 e 12"
