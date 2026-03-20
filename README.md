@@ -82,7 +82,7 @@ O projeto é **intencionalmente evolutivo** — cada etapa adiciona uma camada d
 | **Etapa 2** | Contratos de Dados — Schema registry + validação automática | ✅ Concluída |
 | **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ✅ Concluída |
 | **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ✅ Concluída |
-| **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ⏳ Planejada |
+| **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ✅ Concluída |
 | **Etapa 6** | Avançado — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
 
 ---
@@ -226,6 +226,42 @@ dbt marts (Gold)
 
 ---
 
+## Etapa 5 — Observabilidade
+
+Camada de monitoramento contínuo da plataforma em três dimensões: saúde dos dados, cumprimento de SLAs e estabilidade dos modelos de ML.
+
+**Notebooks**
+
+| Notebook | Tabela de destino | Descrição |
+|----------|-------------------|-----------|
+| `10_data_health` | `observability.data_health` | Volume, freshness e nulos das tabelas Silver |
+| `11_sla_report` | — (queries analíticas) | Cruzamento entre contratos YAML e dados entregues |
+| `12_model_drift` | `observability.model_drift` | PSI por feature dos modelos de ML |
+
+**Health Score**
+
+O `data_health` calcula um score de 0–100 para cada domínio:
+- Volume crítico (< 50% do mínimo) → -40 pontos
+- Volume baixo (< mínimo) → -20 pontos
+- Freshness atrasado → -30 pontos
+- Nulos acima de 1% → -30 pontos
+
+**PSI — Population Stability Index**
+
+Métrica usada para detectar mudança de distribuição nas features dos modelos:
+
+| PSI | Status | Ação |
+|-----|--------|------|
+| < 0.1 | 🟢 ESTÁVEL | Nenhuma |
+| 0.1 – 0.2 | 🟡 MONITORAR | Investigar |
+| > 0.2 | 🔴 RETREINAR | Reprocessar features e retreinar |
+
+**Resultados obtidos**
+
+Todos os 8 checks (3 features do demand_forecast + 5 do fraud_detector) saíram com PSI < 0.02 — esperado, pois treino e produção foram gerados pelo mesmo simulador.
+
+---
+
 ## Estrutura do Repositório
 
 ```
@@ -253,10 +289,14 @@ brazilian-retail-lakehouse/
         │   ├── 04_contract_registry.py   # YAML → contracts.registry
         │   ├── 05_contract_validator.py  # Silver → contracts.violations
         │   └── 06_contract_monitor.py    # Dashboard de conformidade
-        └── ml/
-            ├── 07_feature_engineering.py # demand_features + fraud_features
-            ├── 08_demand_forecast.py     # LightGBM Regressor + MLflow
-            └── 09_fraud_detector.py      # LightGBM Classifier + MLflow
+        ├── ml/
+        │   ├── 07_feature_engineering.py # demand_features + fraud_features
+        │   ├── 08_demand_forecast.py     # LightGBM Regressor + MLflow
+        │   └── 09_fraud_detector.py      # LightGBM Classifier + MLflow
+        └── observability/
+            ├── 10_data_health.py         # Volume, freshness e nulos → observability.data_health
+            ├── 11_sla_report.py          # SLA prometido vs entregue (queries analíticas)
+            └── 12_model_drift.py         # PSI por feature → observability.model_drift
 └── dbt/
     ├── dbt_project.yml                   # Configuração central do projeto dbt
     ├── macros/
@@ -345,6 +385,16 @@ databricks bundle run gold_basic      # executar após o DLT pipeline
 databricks bundle run contract_registry   # executar ao criar/atualizar contratos
 databricks bundle run contract_validator  # executar após cada execução do DLT
 databricks bundle run contract_monitor    # dashboard de conformidade
+
+# Etapa 4 — Plataforma de ML
+databricks bundle run feature_engineering # demand_features + fraud_features
+databricks bundle run demand_forecast     # treina e registra no MLflow
+databricks bundle run fraud_detector      # treina e registra no MLflow
+
+# Etapa 5 — Observabilidade
+databricks bundle run data_health         # saúde das tabelas Silver
+databricks bundle run sla_report          # cumprimento dos SLAs
+databricks bundle run model_drift         # PSI das features dos modelos
 ```
 
 ---
