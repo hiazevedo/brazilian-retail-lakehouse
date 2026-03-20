@@ -67,3 +67,30 @@ resources:
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/contracts/06_contract_monitor
             source: WORKSPACE
+
+    feature_engineering:
+      name: "[retail] 07 - Feature Engineering"
+      tasks:
+        - task_key: feature_engineering
+          description: "Prepara demand_features e fraud_features a partir dos marts dbt"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/07_feature_engineering
+            source: WORKSPACE
+
+    demand_forecast:
+      name: "[retail] 08 - Demand Forecast"
+      tasks:
+        - task_key: demand_forecast
+          description: "Treina modelo LightGBM de previsão de demanda e registra no MLflow"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/08_demand_forecast
+            source: WORKSPACE
+
+    fraud_detector:
+      name: "[retail] 09 - Fraud Detector"
+      tasks:
+        - task_key: fraud_detector
+          description: "Treina modelo LightGBM de detecção de fraude e registra no MLflow"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/09_fraud_detector
+            source: WORKSPACE
