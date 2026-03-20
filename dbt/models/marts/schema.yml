@@ -1,0 +1,100 @@
+version: 2
+
+models:
+  - name: dim_produto
+    description: "Dimensão de produtos — lista de produtos únicos extraídos das vendas"
+    columns:
+      - name: produto_id
+        description: "Identificador único do produto no formato PROD-0001"
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_cliente
+    description: "Dimensão de clientes — perfil mais recente de cada cliente"
+    columns:
+      - name: cliente_id
+        description: "Identificador único do cliente"
+        tests:
+          - not_null
+          - unique
+      - name: faixa_renda
+        tests:
+          - not_null
+
+  - name: dim_loja
+    description: "Dimensão de lojas — lojas únicas extraídas das vendas"
+    columns:
+      - name: loja_id
+        description: "Identificador único da loja"
+        tests:
+          - not_null
+          - unique
+
+  - name: fct_vendas
+    description: "Tabela fato de vendas — cada linha representa uma transação com contexto completo"
+    columns:
+      - name: venda_id
+        description: "Identificador único da venda"
+        tests:
+          - not_null
+      - name: vendido_em
+        tests:
+          - not_null
+      - name: loja_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_loja')
+              field: loja_id
+      - name: produto_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_produto')
+              field: produto_id
+      - name: valor_total
+        tests:
+          - not_null
+
+  - name: mrt_performance_loja
+    description: "KPIs mensais por loja — receita, ticket médio, clientes únicos e mix de pagamento"
+    columns:
+      - name: loja_id
+        tests:
+          - not_null
+      - name: ano_mes
+        tests:
+          - not_null
+      - name: receita_total
+        tests:
+          - not_null
+
+  - name: mrt_risco_fraude
+    description: "Vendas com padrão suspeito — valor acima de 3 desvios padrão ou pagamento recusado com muitas parcelas"
+    columns:
+      - name: venda_id
+        tests:
+          - not_null
+      - name: classificacao_risco
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['alto_risco', 'medio_risco']
+
+  - name: mrt_estoque_atual
+    description: "Posição atual de estoque por loja e produto com classificação de criticidade"
+    columns:
+      - name: loja_id
+        tests:
+          - not_null
+      - name: produto_id
+        tests:
+          - not_null
+      - name: status_estoque
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['critico', 'baixo', 'normal']

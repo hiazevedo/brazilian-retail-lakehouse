@@ -1,0 +1,89 @@
+version: 2
+
+# Sources — tabelas que o dbt não criou, mas vai ler
+# Aponta para as tabelas Silver do DLT Pipeline
+sources:
+  - name: silver
+    catalog: retail_lakehouse
+    schema: silver
+    tables:
+      - name: vendas
+      - name: estoque
+      - name: clientes
+      - name: pagamentos
+
+# Models — os stagings que acabamos de criar
+models:
+  - name: stg_vendas
+    description: "Staging de vendas — limpeza leve da Silver com renomeação de colunas"
+    columns:
+      - name: venda_id
+        description: "Identificador único da venda"
+        tests:
+          - not_null
+          - unique
+      - name: vendido_em
+        tests:
+          - not_null
+      - name: loja_id
+        tests:
+          - not_null
+      - name: produto_id
+        tests:
+          - not_null
+      - name: valor_total
+        tests:
+          - not_null
+
+  - name: stg_estoque
+    description: "Staging de estoque — movimentações de entrada e saída por loja"
+    columns:
+      - name: evento_id
+        description: "Identificador único do evento de estoque"
+        tests:
+          - not_null
+          - unique
+      - name: registrado_em
+        tests:
+          - not_null
+      - name: loja_id
+        tests:
+          - not_null
+      - name: produto_id
+        tests:
+          - not_null
+
+  - name: stg_clientes
+    description: "Staging de clientes — cadastros e atualizações de perfil"
+    columns:
+      - name: cliente_id
+        description: "Identificador único do cliente"
+        tests:
+          - not_null
+      - name: atualizado_em
+        tests:
+          - not_null
+
+  - name: stg_pagamentos
+    description: "Staging de pagamentos — eventos de pagamento associados a vendas"
+    columns:
+      - name: pagamento_id
+        description: "Identificador único do pagamento"
+        tests:
+          - not_null
+          - unique
+      - name: venda_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['aprovado', 'recusado', 'estorno']
+      - name: metodo
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['pix', 'debito', 'credito', 'dinheiro']
