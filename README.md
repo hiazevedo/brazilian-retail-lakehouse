@@ -16,7 +16,7 @@
 
 Plataforma lakehouse que simula o ecossistema de dados de uma rede de varejo brasileira com múltiplos domínios: **vendas**, **estoque**, **clientes** e **pagamentos**. Os eventos são gerados pelo **ShadowTraffic** (simulador declarativo), publicados no **Confluent Cloud (Kafka)** e processados no **Databricks** via **Delta Live Tables** com validações automáticas de qualidade em cada camada.
 
-O projeto é **intencionalmente evolutivo** — cada fase adiciona uma camada de maturidade arquitetural sem quebrar o que foi construído antes, contando a história de como uma plataforma de dados cresce de um pipeline simples para um sistema de produção real.
+O projeto é **intencionalmente evolutivo** — cada etapa adiciona uma camada de maturidade arquitetural sem quebrar o que foi construído antes, contando a história de como uma plataforma de dados cresce de um pipeline simples para um sistema de produção real.
 
 ---
 
@@ -43,7 +43,7 @@ O projeto é **intencionalmente evolutivo** — cada fase adiciona uma camada de
 │         DLT com validações de qualidade (expect_or_drop)     │
 │        vendas │ estoque │ clientes │ pagamentos              │
 └──────────────────────────┬──────────────────────────────────┘
-                           │  dbt (Phase 3)
+                           │  dbt (Etapa 3)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    GOLD — dbt models                         │
@@ -65,7 +65,7 @@ O projeto é **intencionalmente evolutivo** — cada fase adiciona uma camada de
 
 ## Domínios de Dados
 
-| Domínio | Kafka Topic | Frequência | Descrição |
+| Domínio | Tópico Kafka | Frequência | Descrição |
 |---------|-------------|------------|-----------|
 | Vendas | `retail.vendas` | 10–50 eventos/min | Transações de venda (loja, produto, valor) |
 | Estoque | `retail.estoque` | 5–20 eventos/min | Movimentações de estoque |
@@ -74,27 +74,25 @@ O projeto é **intencionalmente evolutivo** — cada fase adiciona uma camada de
 
 ---
 
-## Roadmap de Fases
+## Roadmap de Etapas
 
-| Fase | Descrição | Status |
-|------|-----------|--------|
-| **Phase 1** | Foundation — Kafka + DLT + Bronze/Silver/Gold básico | ✅ Concluída |
-| **Phase 2** | Data Contracts — Schema registry + contract enforcement | 🔄 Em desenvolvimento |
-| **Phase 3** | dbt Layer — Modelo dimensional + semantic layer | ⏳ Planejada |
-| **Phase 4** | ML Platform — Demand forecast + fraud detection | ⏳ Planejada |
-| **Phase 5** | Observability — Data health + SLA + drift monitoring | ⏳ Planejada |
-| **Phase 6** | Advanced — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
+| Etapa | Descrição | Status |
+|-------|-----------|--------|
+| **Etapa 1** | Fundação — Kafka + DLT + Bronze/Silver/Gold básico | ✅ Concluída |
+| **Etapa 2** | Contratos de Dados — Schema registry + validação automática | ✅ Concluída |
+| **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ⏳ Planejada |
+| **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ⏳ Planejada |
+| **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ⏳ Planejada |
+| **Etapa 6** | Avançado — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
 
 ---
 
-## Phase 1 — Foundation
+## Etapa 1 — Fundação
 
-### O que foi construído
-
-Pipeline completo Kafka → Bronze → Silver → Gold com 1.2 milhão de eventos históricos processados.
+Pipeline completo Kafka → Bronze → Silver → Gold com 1,2 milhão de eventos históricos processados.
 
 **ShadowTraffic (simulador de eventos)**
-- `bootstrap.json` — gera histórico de eventos de uma vez
+- `bootstrap.json` — gera histórico de eventos em massa (execução única)
 - `realtime.json` — publica em loop contínuo simulando horários de pico
 
 **DLT Bronze** — ingestão dos 4 tópicos Kafka
@@ -113,7 +111,7 @@ def vendas():
     return dlt.read_stream("raw_vendas").select(from_json(...))
 ```
 
-**Gold Basic** — 4 tabelas analíticas com `MERGE INTO`
+**Gold Básico** — 4 tabelas analíticas com `MERGE INTO`
 
 | Tabela | Descrição |
 |--------|-----------|
@@ -124,11 +122,47 @@ def vendas():
 
 ---
 
+## Etapa 2 — Contratos de Dados
+
+Camada de governança que formaliza o acordo entre produtores e consumidores de dados. Cada domínio possui um contrato YAML versionado com schema, SLAs e regras de qualidade.
+
+**Contratos disponíveis**
+
+| Contrato | Freshness SLA | Volume mínimo/dia | Severidades |
+|----------|--------------|-------------------|-------------|
+| `retail.vendas` | 30 min | 5.000 eventos | CRITICAL + WARNING |
+| `retail.estoque` | 60 min | 500 eventos | CRITICAL + WARNING |
+| `retail.clientes` | 120 min | 100 eventos | CRITICAL + WARNING |
+| `retail.pagamentos` | 30 min | 1.000 eventos | CRITICAL + WARNING |
+
+**Fluxo de contratos**
+
+```
+contracts/*.yaml  →  04_contract_registry  →  contracts.registry
+                                                      │
+                                         05_contract_validator
+                                                      │
+                                         contracts.violations
+                                                      │
+                                         06_contract_monitor (dashboard)
+```
+
+- Violações **CRITICAL** → registradas e o job falha (bloqueia dependentes no Workflow)
+- Violações **WARNING** → registradas, execução continua
+- `06_contract_monitor` — dashboard com freshness check, tendência de 30 dias e resumo executivo
+
+---
+
 ## Estrutura do Repositório
 
 ```
 brazilian-retail-lakehouse/
 ├── databricks.yml                    # Databricks Asset Bundle
+├── contracts/
+│   ├── vendas_v1.yaml                # Contrato do domínio de vendas
+│   ├── estoque_v1.yaml               # Contrato do domínio de estoque
+│   ├── clientes_v1.yaml              # Contrato do domínio de clientes
+│   └── pagamentos_v1.yaml            # Contrato do domínio de pagamentos
 ├── shadowtraffic/
 │   ├── connections.json              # Conexão Confluent Cloud (via env vars)
 │   ├── bootstrap.json                # Geração de histórico em massa
@@ -140,13 +174,17 @@ brazilian-retail-lakehouse/
         │   └── 01_dlt_bronze.py      # DLT: Kafka → Bronze (4 tabelas)
         ├── silver/
         │   └── 02_dlt_silver.py      # DLT: Bronze → Silver (parse + validação)
-        └── gold/
-            └── 03_gold_basic.py      # Agregações analíticas básicas
+        ├── gold/
+        │   └── 03_gold_basic.py      # Agregações analíticas básicas
+        └── contracts/
+            ├── 04_contract_registry.py   # YAML → contracts.registry
+            ├── 05_contract_validator.py  # Silver → contracts.violations
+            └── 06_contract_monitor.py    # Dashboard de conformidade
 ```
 
 ---
 
-## Como rodar localmente
+## Como executar
 
 ### Pré-requisitos
 - Docker Desktop + WSL2 (Ubuntu)
@@ -172,9 +210,23 @@ databricks secrets put-secret retail-lakehouse confluent_api_key --string-value 
 databricks secrets put-secret retail-lakehouse confluent_api_secret --string-value "<valor>"
 ```
 
-### Gerar dados históricos (executar uma vez)
+### Gerar carga histórica (executar uma vez)
+
+> Execute os comandos abaixo no terminal **WSL Ubuntu**, a partir da raiz do projeto.
+
+**1. Validar configuração antes de publicar (dry run — não envia ao Kafka)**
 ```bash
-cd /mnt/c/.../brazilian-retail-lakehouse  # no WSL Ubuntu
+docker run --rm \
+  --env-file shadowtraffic/license.env \
+  --env-file shadowtraffic/.env \
+  -v "$(pwd)/shadowtraffic":/shadowtraffic \
+  shadowtraffic/shadowtraffic:latest \
+  --config /shadowtraffic/bootstrap.json \
+  --stdout --sample 5
+```
+
+**2. Gerar histórico (~1,2 milhão de eventos)**
+```bash
 docker run --rm \
   --env-file shadowtraffic/license.env \
   --env-file shadowtraffic/.env \
@@ -184,6 +236,7 @@ docker run --rm \
 ```
 
 ### Publicar eventos em tempo real
+
 ```bash
 docker run --rm \
   --env-file shadowtraffic/license.env \
@@ -196,8 +249,15 @@ docker run --rm \
 ### Deploy e execução no Databricks
 ```bash
 databricks bundle deploy
-databricks bundle run setup      # executar uma única vez
-databricks bundle run gold_basic # executar após o DLT pipeline
+
+# Etapa 1 — Fundação
+databricks bundle run setup           # executar uma única vez
+databricks bundle run gold_basic      # executar após o DLT pipeline
+
+# Etapa 2 — Contratos de Dados
+databricks bundle run contract_registry   # executar ao criar/atualizar contratos
+databricks bundle run contract_validator  # executar após cada execução do DLT
+databricks bundle run contract_monitor    # dashboard de conformidade
 ```
 
 ---
@@ -216,4 +276,4 @@ Schemas : bronze | silver | gold | ml_features | contracts | observability
 - **Databricks Free Edition** (Serverless AWS)
 - **Unity Catalog** habilitado
 - **Confluent Cloud** free tier (10 GB/mês) como broker Kafka
-- **GitHub Actions** para CI/CD (Phase 2+)
+- **GitHub Actions** para CI/CD (Etapa 3+)
