@@ -1,0 +1,42 @@
+bundle:
+  name: brazilian-retail-lakehouse
+
+workspace:
+  host: https://dbc-4755d9a9-d11b.cloud.databricks.com
+  root_path: ~/.bundle/${bundle.name}/${bundle.target}
+
+targets:
+
+  dev:
+    mode: development
+    default: true
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Shared/brazilian-retail-lakehouse
+
+# ---------------------------------------------------------------------------
+resources:
+  jobs:
+
+    # -------------------------------------------------------------------------
+    # Job de setup: executar manualmente uma única vez antes dos pipelines
+    # -------------------------------------------------------------------------
+    setup:
+      name: "[retail] 00 - Setup Infraestrutura"
+      tasks:
+        - task_key: setup
+          description: "Cria catalog, schemas, volumes e configura pipeline_config"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/00_setup
+            source: WORKSPACE
+
+    gold_basic:
+      name: "[retail] 03 - Gold Basic"
+      tasks:
+        - task_key: gold_basic
+          description: "Agrega dados Silver nas 4 tabelas Gold analíticas"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/gold/03_gold_basic
+            source: WORKSPACE

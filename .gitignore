@@ -1,0 +1,27 @@
+# Credenciais e segredos — NUNCA subir para o repositório
+shadowtraffic/.env
+shadowtraffic/license.env
+
+# Arquivos de ambiente Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv
+venv/
+
+# Databricks
+.databricks/
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

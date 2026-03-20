@@ -1,0 +1,187 @@
+{
+  "generators": [
+    {
+      "topic": "retail.vendas",
+      "connection": "confluent-cloud",
+      "vars": {
+        "vendaId": { "_gen": "uuid" },
+        "lojaId": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 40, "value": "SP-001" },
+            { "weight": 40, "value": "SP-002" },
+            { "weight": 20, "value": "RJ-001" },
+            { "weight": 15, "value": "MG-001" },
+            { "weight": 10, "value": "RS-001" },
+            { "weight": 10, "value": "PR-001" },
+            { "weight": 5,  "value": "BA-001" }
+          ]
+        }
+      },
+      "key": {
+        "vendaId": { "_gen": "var", "var": "vendaId" }
+      },
+      "value": {
+        "venda_id":       { "_gen": "var", "var": "vendaId" },
+        "timestamp":      { "_gen": "formatDateTime", "ms": { "_gen": "now" }, "format": "yyyy-MM-dd'T'HH:mm:ss" },
+        "loja_id":        { "_gen": "var", "var": "lojaId" },
+        "produto_id":     { "_gen": "sequentialInteger", "cardinality": 500 },
+        "cliente_id":     { "_gen": "uuid", "cardinality": 10000 },
+        "quantidade":     { "_gen": "uniformDistribution", "bounds": [1, 10], "decimals": 0 },
+        "preco_unitario": { "_gen": "normalDistribution", "mean": 150, "sd": 80, "decimals": 2, "clamp": [5, 2000] },
+        "desconto_pct":   { "_gen": "uniformDistribution", "bounds": [0, 0.3], "decimals": 2 },
+        "canal": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 60, "value": "fisico" },
+            { "weight": 40, "value": "online" }
+          ]
+        },
+        "uf": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 40, "value": "SP" },
+            { "weight": 20, "value": "RJ" },
+            { "weight": 15, "value": "MG" },
+            { "weight": 10, "value": "RS" },
+            { "weight": 10, "value": "PR" },
+            { "weight": 5,  "value": "BA" }
+          ]
+        },
+        "schema_version": "1.0"
+      },
+      "localConfigs": {
+        "maxEvents": 500000
+      }
+    },
+
+    {
+      "topic": "retail.pagamentos",
+      "connection": "confluent-cloud",
+      "value": {
+        "pagamento_id": { "_gen": "uuid" },
+        "venda_id": {
+          "_gen": "lookup",
+          "topic": "retail.vendas",
+          "path": ["value", "venda_id"]
+        },
+        "timestamp": { "_gen": "formatDateTime", "ms": { "_gen": "now" }, "format": "yyyy-MM-dd'T'HH:mm:ss" },
+        "metodo": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 60, "value": "pix" },
+            { "weight": 20, "value": "debito" },
+            { "weight": 15, "value": "credito" },
+            { "weight": 5,  "value": "dinheiro" }
+          ]
+        },
+        "status": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 94, "value": "aprovado" },
+            { "weight": 4,  "value": "recusado" },
+            { "weight": 2,  "value": "estorno" }
+          ]
+        },
+        "parcelas": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 60, "value": 1 },
+            { "weight": 20, "value": 2 },
+            { "weight": 15, "value": 3 },
+            { "weight": 5,  "value": 12 }
+          ]
+        },
+        "schema_version": "1.0"
+      },
+      "localConfigs": {
+        "maxEvents": 500000
+      }
+    },
+
+    {
+      "topic": "retail.estoque",
+      "connection": "confluent-cloud",
+      "value": {
+        "evento_id":  { "_gen": "uuid" },
+        "timestamp":  { "_gen": "formatDateTime", "ms": { "_gen": "now" }, "format": "yyyy-MM-dd'T'HH:mm:ss" },
+        "loja_id": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 40, "value": "SP-001" },
+            { "weight": 40, "value": "SP-002" },
+            { "weight": 20, "value": "RJ-001" },
+            { "weight": 15, "value": "MG-001" },
+            { "weight": 10, "value": "RS-001" },
+            { "weight": 10, "value": "PR-001" },
+            { "weight": 5,  "value": "BA-001" }
+          ]
+        },
+        "produto_id": { "_gen": "sequentialInteger", "cardinality": 500 },
+        "tipo_movimento": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 50, "value": "saida" },
+            { "weight": 30, "value": "entrada" },
+            { "weight": 15, "value": "ajuste" },
+            { "weight": 5,  "value": "transferencia" }
+          ]
+        },
+        "quantidade":    { "_gen": "uniformDistribution", "bounds": [1, 50], "decimals": 0 },
+        "estoque_atual": { "_gen": "uniformDistribution", "bounds": [0, 500], "decimals": 0 },
+        "schema_version": "1.0"
+      },
+      "localConfigs": {
+        "maxEvents": 200000
+      }
+    },
+
+    {
+      "topic": "retail.clientes",
+      "connection": "confluent-cloud",
+      "value": {
+        "cliente_id": { "_gen": "uuid", "cardinality": 10000 },
+        "timestamp":  { "_gen": "formatDateTime", "ms": { "_gen": "now" }, "format": "yyyy-MM-dd'T'HH:mm:ss" },
+        "tipo_evento": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 70, "value": "cadastro" },
+            { "weight": 25, "value": "atualizacao" },
+            { "weight": 5,  "value": "inativacao" }
+          ]
+        },
+        "cidade": {
+          "_gen": "oneOf",
+          "choices": ["São Paulo", "Rio de Janeiro", "Belo Horizonte", "Porto Alegre", "Curitiba", "Salvador", "Fortaleza"]
+        },
+        "uf": {
+          "_gen": "oneOf",
+          "choices": ["SP", "RJ", "MG", "RS", "PR", "BA", "CE"]
+        },
+        "faixa_renda": {
+          "_gen": "weightedOneOf",
+          "choices": [
+            { "weight": 15, "value": "A" },
+            { "weight": 25, "value": "B" },
+            { "weight": 35, "value": "C" },
+            { "weight": 20, "value": "D" },
+            { "weight": 5,  "value": "E" }
+          ]
+        },
+        "canal_preferido": {
+          "_gen": "oneOf",
+          "choices": ["fisico", "online", "ambos"]
+        },
+        "schema_version": "1.0"
+      },
+      "localConfigs": {
+        "maxEvents": 15000
+      }
+    }
+  ],
+
+  "connections": {
+    "_gen": "loadJsonFile",
+    "file": "/shadowtraffic/connections.json"
+  }
+}
