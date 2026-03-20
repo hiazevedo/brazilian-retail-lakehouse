@@ -94,3 +94,30 @@ resources:
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/ml/09_fraud_detector
             source: WORKSPACE
+
+    data_health:
+      name: "[retail] 10 - Data Health Monitor"
+      tasks:
+        - task_key: data_health
+          description: "Monitora volume, freshness e qualidade das tabelas Silver"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/observability/10_data_health
+            source: WORKSPACE
+
+    sla_report:
+      name: "[retail] 11 - SLA Report"
+      tasks:
+        - task_key: sla_report
+          description: "Relatório de cumprimento de SLAs por domínio"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/observability/11_sla_report
+            source: WORKSPACE
+
+    model_drift:
+      name: "[retail] 12 - Model Drift Monitor"
+      tasks:
+        - task_key: model_drift
+          description: "Detecta drift nas features dos modelos de ML usando PSI"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/observability/12_model_drift
+            source: WORKSPACE
