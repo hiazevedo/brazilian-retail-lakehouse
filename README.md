@@ -80,7 +80,7 @@ O projeto é **intencionalmente evolutivo** — cada etapa adiciona uma camada d
 |-------|-----------|--------|
 | **Etapa 1** | Fundação — Kafka + DLT + Bronze/Silver/Gold básico | ✅ Concluída |
 | **Etapa 2** | Contratos de Dados — Schema registry + validação automática | ✅ Concluída |
-| **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ⏳ Planejada |
+| **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ✅ Concluída |
 | **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ⏳ Planejada |
 | **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ⏳ Planejada |
 | **Etapa 6** | Avançado — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
@@ -153,6 +153,47 @@ contracts/*.yaml  →  04_contract_registry  →  contracts.registry
 
 ---
 
+## Etapa 3 — Camada dbt
+
+Modelo dimensional completo construído sobre as tabelas Silver com dbt-databricks. Substitui as agregações manuais da Etapa 1 por models declarativos com testes de qualidade e documentação automática.
+
+**Camadas do projeto dbt**
+
+```
+Silver (DLT)
+    │
+    ├── staging/          limpeza leve, 1:1 com a Silver
+    │   ├── stg_vendas
+    │   ├── stg_estoque
+    │   ├── stg_clientes
+    │   └── stg_pagamentos
+    │
+    ├── intermediate/     joins e regras de negócio reutilizáveis
+    │   ├── int_vendas_enriquecidas   (vendas + pagamentos)
+    │   └── int_estoque_posicao       (posição mais recente por loja/produto)
+    │
+    └── marts/            tabelas finais para consumo analítico
+        ├── fct_vendas              tabela fato principal
+        ├── dim_produto
+        ├── dim_cliente
+        ├── dim_loja
+        ├── mrt_performance_loja    KPIs mensais por loja
+        ├── mrt_risco_fraude        vendas com padrão suspeito
+        └── mrt_estoque_atual       posição de estoque com criticidade
+```
+
+**Testes de qualidade:** 51 testes automatizados (`not_null`, `unique`, `accepted_values`, `relationships`) cobrindo todas as camadas.
+
+**Como executar o dbt**
+```bash
+dbt run   --profiles-dir ~/.dbt --project-dir dbt   # cria/atualiza todos os models
+dbt test  --profiles-dir ~/.dbt --project-dir dbt   # executa os 51 testes
+dbt docs generate --profiles-dir ~/.dbt --project-dir dbt  # gera documentação
+dbt docs serve    --profiles-dir ~/.dbt --project-dir dbt  # abre DAG no browser
+```
+
+---
+
 ## Estrutura do Repositório
 
 ```
@@ -180,6 +221,12 @@ brazilian-retail-lakehouse/
             ├── 04_contract_registry.py   # YAML → contracts.registry
             ├── 05_contract_validator.py  # Silver → contracts.violations
             └── 06_contract_monitor.py    # Dashboard de conformidade
+└── dbt/
+    ├── dbt_project.yml                   # Configuração central do projeto dbt
+    └── models/
+        ├── staging/                      # 4 models + schema.yml
+        ├── intermediate/                 # 2 models + schema.yml
+        └── marts/                        # 7 models + schema.yml
 ```
 
 ---
@@ -191,6 +238,8 @@ brazilian-retail-lakehouse/
 - Conta Confluent Cloud com cluster e tópicos criados
 - Conta ShadowTraffic (free trial — shadowtraffic.io)
 - Databricks CLI configurado
+- Python 3.11+ com `dbt-databricks` instalado (`pip install dbt-databricks`)
+- Arquivo `~/.dbt/profiles.yml` configurado com host, HTTP path e token do Databricks
 
 ### Configurar credenciais
 
