@@ -81,7 +81,7 @@ O projeto é **intencionalmente evolutivo** — cada etapa adiciona uma camada d
 | **Etapa 1** | Fundação — Kafka + DLT + Bronze/Silver/Gold básico | ✅ Concluída |
 | **Etapa 2** | Contratos de Dados — Schema registry + validação automática | ✅ Concluída |
 | **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ✅ Concluída |
-| **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ⏳ Planejada |
+| **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ✅ Concluída |
 | **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ⏳ Planejada |
 | **Etapa 6** | Avançado — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
 
@@ -194,6 +194,38 @@ dbt docs serve    --profiles-dir ~/.dbt --project-dir dbt  # abre DAG no browser
 
 ---
 
+## Etapa 4 — Plataforma de ML
+
+Pipeline completo de Machine Learning com feature engineering, treinamento e tracking de experimentos via MLflow.
+
+**Fluxo**
+
+```
+dbt marts (Gold)
+    │
+    ▼
+07_feature_engineering
+    ├── ml_features.demand_features   (3.500 linhas — médias móveis por produto/loja)
+    └── ml_features.fraud_features    (749K linhas — perfil de comportamento por cliente)
+         │
+         ├── 08_demand_forecast    LightGBM Regressor   → experimento MLflow
+         └── 09_fraud_detector     LightGBM Classifier  → experimento MLflow
+```
+
+**Resultados**
+
+| Modelo | Algoritmo | Métricas |
+|--------|-----------|---------|
+| `demand_forecast` | LightGBM Regressor | RMSE=6.54 · MAE=3.13 · R²=0.9999 |
+| `fraud_detector` | LightGBM Classifier | F1=0.982 · AUC-ROC=1.0 · Precision=0.967 · Recall=0.998 |
+
+**Decisões técnicas**
+- Médias móveis com `Window.rangeBetween` em segundos — captura 7/30 dias reais independente de gaps nos dados
+- `scale_pos_weight` no classifier para compensar desbalanceamento de classes (poucos fraudes vs muitas transações normais)
+- `mlflow.autolog(disable=True)` + `MLFLOW_DFS_TMP` via UC Volume — workarounds necessários para o Databricks Free Edition Serverless
+
+---
+
 ## Estrutura do Repositório
 
 ```
@@ -217,12 +249,18 @@ brazilian-retail-lakehouse/
         │   └── 02_dlt_silver.py      # DLT: Bronze → Silver (parse + validação)
         ├── gold/
         │   └── 03_gold_basic.py      # Agregações analíticas básicas
-        └── contracts/
-            ├── 04_contract_registry.py   # YAML → contracts.registry
-            ├── 05_contract_validator.py  # Silver → contracts.violations
-            └── 06_contract_monitor.py    # Dashboard de conformidade
+        ├── contracts/
+        │   ├── 04_contract_registry.py   # YAML → contracts.registry
+        │   ├── 05_contract_validator.py  # Silver → contracts.violations
+        │   └── 06_contract_monitor.py    # Dashboard de conformidade
+        └── ml/
+            ├── 07_feature_engineering.py # demand_features + fraud_features
+            ├── 08_demand_forecast.py     # LightGBM Regressor + MLflow
+            └── 09_fraud_detector.py      # LightGBM Classifier + MLflow
 └── dbt/
     ├── dbt_project.yml                   # Configuração central do projeto dbt
+    ├── macros/
+    │   └── generate_schema_name.sql      # Override de schema para Databricks
     └── models/
         ├── staging/                      # 4 models + schema.yml
         ├── intermediate/                 # 2 models + schema.yml
