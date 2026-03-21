@@ -39,7 +39,6 @@ spark.sql("""
         health_score     INT       COMMENT 'Score geral: 100=saudável, decresce por problema'
     )
     COMMENT 'Histórico de saúde das tabelas Silver'
-    PARTITIONED BY (check_date)
 """)
 
 print("✔ Tabela observability.data_health criada")

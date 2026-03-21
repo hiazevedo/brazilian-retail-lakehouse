@@ -36,7 +36,6 @@ spark.sql("""
         desvio_atual    DOUBLE    COMMENT 'Desvio padrão atual'
     )
     COMMENT 'Histórico de drift dos modelos de ML'
-    PARTITIONED BY (check_date)
 """)
 
 print("✔ Tabela observability.model_drift criada")

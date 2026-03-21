@@ -21,19 +21,31 @@ resources:
   jobs:
 
     # -------------------------------------------------------------------------
-    # Job de setup: executar manualmente uma única vez antes dos pipelines
+    # [varejo-setup] Executar manualmente uma única vez antes dos pipelines
+    # Cria toda a infraestrutura e registra os contratos de dados
     # -------------------------------------------------------------------------
-    setup:
-      name: "[retail] 00 - Setup Infraestrutura"
+    varejo_setup:
+      name: "[varejo-setup] Configuração Inicial"
       tasks:
-        - task_key: setup
+        - task_key: setup_infraestrutura
           description: "Cria catalog, schemas, volumes e configura pipeline_config"
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/00_setup
             source: WORKSPACE
 
-    gold_basic:
-      name: "[retail] 03 - Gold Basic"
+        - task_key: contract_registry
+          description: "Lê os YAMLs de contratos e popula contracts.registry"
+          depends_on:
+            - task_key: setup_infraestrutura
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/04_contract_registry
+            source: WORKSPACE
+
+    # -------------------------------------------------------------------------
+    # [varejo-pipeline] Pipeline diário: Gold → Features → Scoring → Observabilidade
+    # -------------------------------------------------------------------------
+    varejo_pipeline:
+      name: "[varejo-pipeline] Pipeline Diário"
       tasks:
         - task_key: gold_basic
           description: "Agrega dados Silver nas 4 tabelas Gold analíticas"
@@ -41,83 +53,103 @@ resources:
             notebook_path: ${workspace.file_path}/src/notebooks/gold/03_gold_basic
             source: WORKSPACE
 
-    contract_registry:
-      name: "[retail] 04 - Contract Registry"
-      tasks:
-        - task_key: contract_registry
-          description: "Lê os YAMLs de contratos e popula contracts.registry"
-          notebook_task:
-            notebook_path: ${workspace.file_path}/src/notebooks/contracts/04_contract_registry
-            source: WORKSPACE
-
-    contract_validator:
-      name: "[retail] 05 - Contract Validator"
-      tasks:
-        - task_key: contract_validator
-          description: "Valida dados Silver contra os contratos ativos e registra violações"
-          notebook_task:
-            notebook_path: ${workspace.file_path}/src/notebooks/contracts/05_contract_validator
-            source: WORKSPACE
-
-    contract_monitor:
-      name: "[retail] 06 - Contract Monitor"
-      tasks:
-        - task_key: contract_monitor
-          description: "Dashboard analítico de conformidade de data contracts"
-          notebook_task:
-            notebook_path: ${workspace.file_path}/src/notebooks/contracts/06_contract_monitor
-            source: WORKSPACE
-
-    feature_engineering:
-      name: "[retail] 07 - Feature Engineering"
-      tasks:
         - task_key: feature_engineering
           description: "Prepara demand_features e fraud_features a partir dos marts dbt"
+          depends_on:
+            - task_key: gold_basic
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/ml/07_feature_engineering
             source: WORKSPACE
 
-    demand_forecast:
-      name: "[retail] 08 - Demand Forecast"
-      tasks:
-        - task_key: demand_forecast
-          description: "Treina modelo LightGBM de previsão de demanda e registra no MLflow"
+        - task_key: feature_store
+          description: "Documenta as feature tables no Unity Catalog e cria o feature_catalog"
+          depends_on:
+            - task_key: feature_engineering
           notebook_task:
-            notebook_path: ${workspace.file_path}/src/notebooks/ml/08_demand_forecast
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/13_feature_store
             source: WORKSPACE
 
-    fraud_detector:
-      name: "[retail] 09 - Fraud Detector"
-      tasks:
-        - task_key: fraud_detector
-          description: "Treina modelo LightGBM de detecção de fraude e registra no MLflow"
+        - task_key: batch_scoring
+          description: "Aplica fraud_detector e demand_forecast em batch e salva predições no Gold"
+          depends_on:
+            - task_key: feature_store
           notebook_task:
-            notebook_path: ${workspace.file_path}/src/notebooks/ml/09_fraud_detector
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/14_batch_scoring
             source: WORKSPACE
 
-    data_health:
-      name: "[retail] 10 - Data Health Monitor"
-      tasks:
+        - task_key: contract_validator
+          description: "Valida dados Silver contra os contratos ativos e registra violações"
+          depends_on:
+            - task_key: gold_basic
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/05_contract_validator
+            source: WORKSPACE
+
+        - task_key: contract_monitor
+          description: "Dashboard analítico de conformidade de data contracts"
+          depends_on:
+            - task_key: contract_validator
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/contracts/06_contract_monitor
+            source: WORKSPACE
+
         - task_key: data_health
           description: "Monitora volume, freshness e qualidade das tabelas Silver"
+          depends_on:
+            - task_key: gold_basic
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/observability/10_data_health
             source: WORKSPACE
 
-    sla_report:
-      name: "[retail] 11 - SLA Report"
-      tasks:
         - task_key: sla_report
           description: "Relatório de cumprimento de SLAs por domínio"
+          depends_on:
+            - task_key: contract_validator
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/observability/11_sla_report
             source: WORKSPACE
 
-    model_drift:
-      name: "[retail] 12 - Model Drift Monitor"
-      tasks:
         - task_key: model_drift
           description: "Detecta drift nas features dos modelos de ML usando PSI"
+          depends_on:
+            - task_key: batch_scoring
           notebook_task:
             notebook_path: ${workspace.file_path}/src/notebooks/observability/12_model_drift
+            source: WORKSPACE
+
+    # -------------------------------------------------------------------------
+    # [varejo-ml] Treinamento sob demanda — rodar ao atualizar modelos
+    # -------------------------------------------------------------------------
+    varejo_ml:
+      name: "[varejo-ml] Treinamento de Modelos"
+      tasks:
+        - task_key: feature_engineering
+          description: "Atualiza demand_features e fraud_features com dados mais recentes"
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/07_feature_engineering
+            source: WORKSPACE
+
+        - task_key: demand_forecast
+          description: "Treina modelo LightGBM de previsão de demanda e registra no MLflow"
+          depends_on:
+            - task_key: feature_engineering
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/08_demand_forecast
+            source: WORKSPACE
+
+        - task_key: fraud_detector
+          description: "Treina modelo LightGBM de detecção de fraude e registra no MLflow"
+          depends_on:
+            - task_key: feature_engineering
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/09_fraud_detector
+            source: WORKSPACE
+
+        - task_key: ab_test
+          description: "Compara champion vs challenger para fraud_detector e demand_forecast"
+          depends_on:
+            - task_key: demand_forecast
+            - task_key: fraud_detector
+          notebook_task:
+            notebook_path: ${workspace.file_path}/src/notebooks/ml/15_ab_test
             source: WORKSPACE

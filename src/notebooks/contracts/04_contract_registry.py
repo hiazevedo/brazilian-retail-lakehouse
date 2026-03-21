@@ -88,7 +88,6 @@ spark.sql("""
         run_date           DATE      COMMENT 'Data da execução'
     )
     COMMENT 'Registro histórico de violações de data contracts'
-    PARTITIONED BY (run_date)
 """)
 
 print("✔ Tabelas contracts.registry e contracts.violations criadas")

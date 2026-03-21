@@ -142,10 +142,8 @@ with mlflow.start_run(run_name="lgbm_fraud_v1"):
     mlflow.log_metric("precision", round(precision, 4))
     mlflow.log_metric("recall",    round(recall,    4))
 
-    mlflow.sklearn.log_model(
-        modelo, "model",
-        input_example=X_train.iloc[:5]
-    )
+    # input_example removido — causa CONFIG_NOT_AVAILABLE no Serverless Free Edition
+    mlflow.sklearn.log_model(modelo, "model")
 
     print("=" * 55)
     print("FRAUD DETECTOR — RESULTADOS")

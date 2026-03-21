@@ -44,7 +44,7 @@ spark.sql("""
         updated_at       TIMESTAMP COMMENT 'Última atualização do registro'
     )
     COMMENT 'Vendas agregadas por loja e dia — base para dashboard de performance'
-    PARTITIONED BY (ano_mes)
+
 """)
 
 spark.sql("""
@@ -67,6 +67,7 @@ spark.sql("""
     ) AS source
     ON target.loja_id = source.loja_id
     AND target.data   = source.data
+    AND target.uf     = source.uf
     WHEN MATCHED THEN UPDATE SET *
     WHEN NOT MATCHED THEN INSERT *
 """)
@@ -151,7 +152,7 @@ spark.sql("""
         updated_at       TIMESTAMP COMMENT 'Última atualização do registro'
     )
     COMMENT 'Distribuição de pagamentos por método e status'
-    PARTITIONED BY (ano_mes)
+
 """)
 
 spark.sql("""

@@ -144,10 +144,8 @@ with mlflow.start_run(run_name="lgbm_demand_v1"):
 
     # LightGBM tem API sklearn-compatível — mlflow.sklearn.log_model funciona
     # sem depender do Model Registry (indisponível no Free Edition Serverless)
-    mlflow.sklearn.log_model(
-        modelo, "model",
-        input_example=X_train.iloc[:5]
-    )
+    # input_example removido — causa CONFIG_NOT_AVAILABLE no Serverless Free Edition
+    mlflow.sklearn.log_model(modelo, "model")
 
     print("=" * 55)
     print("DEMAND FORECAST — RESULTADOS")
