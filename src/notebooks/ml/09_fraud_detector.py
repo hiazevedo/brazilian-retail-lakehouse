@@ -32,11 +32,6 @@ mlflow.autolog(disable=True)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Carregar features
-
-# COMMAND ----------
-
 df = spark.table("retail_lakehouse.ml_features.fraud_features").toPandas()
 
 total   = len(df)
@@ -44,11 +39,6 @@ fraudes = df["label"].sum()
 print(f"✔ {total:,} transações carregadas")
 print(f"  Fraudes : {fraudes:,} ({fraudes/total*100:.2f}%)")
 print(f"  Normais : {total - fraudes:,} ({(total-fraudes)/total*100:.2f}%)")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 2. Preparar dados para treino
 
 # COMMAND ----------
 
@@ -77,11 +67,6 @@ X_train, X_val, y_train, y_val = train_test_split(
 
 print(f"✔ Treino    : {len(X_train):,} | Fraudes: {y_train.sum():,} ({y_train.mean()*100:.2f}%)")
 print(f"✔ Validação : {len(X_val):,} | Fraudes: {y_val.sum():,} ({y_val.mean()*100:.2f}%)")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Treinar modelo com MLflow
 
 # COMMAND ----------
 
@@ -174,17 +159,12 @@ print(f"  Falsos Positivos (alertas incorretos)    : {cm[0][1]:,}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 5. Importância das features
-
-# COMMAND ----------
-
-importancia = pd.DataFrame({
+feature_importance = pd.DataFrame({
     "feature":     FEATURES,
-    "importancia": modelo.feature_importances_,
-}).sort_values("importancia", ascending=False)
+    "feature_importance": modelo.feature_importances_,
+}).sort_values("feature_importance", ascending=False)
 
 print("\nImportância das features:")
-for _, row in importancia.iterrows():
-    barra = "█" * int(row["importancia"] / importancia["importancia"].max() * 30)
-    print(f"  {row['feature']:<25} {barra} {row['importancia']:.0f}")
+for _, row in feature_importance.iterrows():
+    barra = "█" * int(row["feature_importance"] / feature_importance["feature_importance"].max() * 30)
+    print(f"  {row['feature']:<25} {barra} {row['feature_importance']:.0f}")

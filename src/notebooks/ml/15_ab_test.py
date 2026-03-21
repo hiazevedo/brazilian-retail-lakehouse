@@ -41,11 +41,6 @@ mlflow.autolog(disable=True)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Criar tabela de resultados
-
-# COMMAND ----------
-
 spark.sql("""
     CREATE TABLE IF NOT EXISTS retail_lakehouse.gold.ab_test_results (
         test_date       DATE    COMMENT 'Data do teste',
@@ -68,11 +63,6 @@ print("✔ Tabela gold.ab_test_results criada")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Configuração
-
-# COMMAND ----------
-
 spark.sql("CREATE VOLUME IF NOT EXISTS retail_lakehouse.ml_features.mlflow_tmp")
 MLFLOW_TMP   = "/Volumes/retail_lakehouse/ml_features/mlflow_tmp"
 os.environ["MLFLOW_DFS_TMP"] = MLFLOW_TMP
@@ -80,7 +70,7 @@ os.environ["MLFLOW_DFS_TMP"] = MLFLOW_TMP
 CURRENT_USER = spark.sql("SELECT current_user()").collect()[0][0]
 TODAY        = date.today().isoformat()
 
-resultados = []
+results = []
 
 # COMMAND ----------
 
@@ -135,9 +125,9 @@ runs_fraud = mlflow.search_runs(
 )
 
 run_id_v1 = runs_fraud.iloc[0]["run_id"]
-modelo_v1_fraud = mlflow.sklearn.load_model(f"runs:/{run_id_v1}/model")
+model_v1_fraud = mlflow.sklearn.load_model(f"runs:/{run_id_v1}/model")
 
-y_prob_v1 = modelo_v1_fraud.predict_proba(X_test_f)[:, 1]
+y_prob_v1 = model_v1_fraud.predict_proba(X_test_f)[:, 1]
 y_pred_v1 = (y_prob_v1 >= 0.5).astype(int)
 
 f1_v1        = round(f1_score(y_test_f, y_pred_v1),        4)
@@ -146,7 +136,7 @@ precision_v1 = round(precision_score(y_test_f, y_pred_v1), 4)
 
 print(f"Fraud v1 (champion) — F1={f1_v1} | AUC={auc_v1} | Precision={precision_v1}")
 
-resultados.append({
+results.append({
     "test_date":       TODAY,
     "modelo":          "fraud_detector",
     "versao":          "v1",
@@ -190,14 +180,14 @@ with mlflow.start_run(run_name="lgbm_fraud_v2_challenger") as run_v2_fraud:
     mlflow.log_params(PARAMS_V2)
     mlflow.log_param("ab_test", "challenger")
 
-    modelo_v2_fraud = lgb.LGBMClassifier(**PARAMS_V2)
-    modelo_v2_fraud.fit(
+    model_v2_fraud = lgb.LGBMClassifier(**PARAMS_V2)
+    model_v2_fraud.fit(
         X_train_f, y_train_f,
         eval_set=[(X_test_f, y_test_f)],
         callbacks=[lgb.early_stopping(50, verbose=False)],
     )
 
-    y_prob_v2 = modelo_v2_fraud.predict_proba(X_test_f)[:, 1]
+    y_prob_v2 = model_v2_fraud.predict_proba(X_test_f)[:, 1]
     y_pred_v2 = (y_prob_v2 >= 0.5).astype(int)
 
     f1_v2        = round(f1_score(y_test_f, y_pred_v2),        4)
@@ -208,11 +198,11 @@ with mlflow.start_run(run_name="lgbm_fraud_v2_challenger") as run_v2_fraud:
     mlflow.log_metric("auc_roc",   auc_v2)
     mlflow.log_metric("precision", precision_v2)
 
-    mlflow.sklearn.log_model(modelo_v2_fraud, "model")
+    mlflow.sklearn.log_model(model_v2_fraud, "model")
 
 print(f"Fraud v2 (challenger) — F1={f1_v2} | AUC={auc_v2} | Precision={precision_v2}")
 
-resultados.append({
+results.append({
     "test_date":       TODAY,
     "modelo":          "fraud_detector",
     "versao":          "v2",
@@ -239,8 +229,8 @@ vencedor_fraud = "v2" if f1_v2 > f1_v1 else "v1"
 delta_f1       = round(f1_v2 - f1_v1, 4)
 delta_auc      = round(auc_v2 - auc_v1, 4)
 
-# Marca o vencedor na lista de resultados
-for r in resultados:
+# Marca o vencedor na lista de results
+for r in results:
     if r["modelo"] == "fraud_detector" and r["versao"] == vencedor_fraud:
         r["vencedor"] = True
 
@@ -270,12 +260,12 @@ df_demand = spark.table("retail_lakehouse.ml_features.demand_features").toPandas
 
 # Reaplica o mesmo encoding do treinamento (08_demand_forecast)
 from sklearn.preprocessing import LabelEncoder
-le_produto = LabelEncoder()
-le_loja    = LabelEncoder()
+le_product = LabelEncoder()
+le_store   = LabelEncoder()
 le_status  = LabelEncoder()
 
-df_demand["produto_enc"] = le_produto.fit_transform(df_demand["produto_id"])
-df_demand["loja_enc"]    = le_loja.fit_transform(df_demand["loja_id"])
+df_demand["produto_enc"] = le_product.fit_transform(df_demand["produto_id"])
+df_demand["loja_enc"]    = le_store.fit_transform(df_demand["loja_id"])
 df_demand["status_enc"]  = le_status.fit_transform(df_demand["status_estoque"])
 
 FEATURES_DEMAND = [
@@ -316,9 +306,9 @@ runs_demand = mlflow.search_runs(
 )
 
 run_id_v1_demand = runs_demand.iloc[0]["run_id"]
-modelo_v1_demand = mlflow.sklearn.load_model(f"runs:/{run_id_v1_demand}/model")
+model_v1_demand = mlflow.sklearn.load_model(f"runs:/{run_id_v1_demand}/model")
 
-y_pred_v1_d = modelo_v1_demand.predict(X_test_d)
+y_pred_v1_d = model_v1_demand.predict(X_test_d)
 
 rmse_v1 = round(root_mean_squared_error(y_test_d, y_pred_v1_d), 4)
 mae_v1  = round(mean_absolute_error(y_test_d, y_pred_v1_d),     4)
@@ -326,7 +316,7 @@ r2_v1   = round(r2_score(y_test_d, y_pred_v1_d),                4)
 
 print(f"Demand v1 (champion) — RMSE={rmse_v1} | MAE={mae_v1} | R²={r2_v1}")
 
-resultados.append({
+results.append({
     "test_date":       TODAY,
     "modelo":          "demand_forecast",
     "versao":          "v1",
@@ -369,14 +359,14 @@ with mlflow.start_run(run_name="lgbm_demand_v2_challenger") as run_v2_demand:
     mlflow.log_params(PARAMS_V2_DEMAND)
     mlflow.log_param("ab_test", "challenger")
 
-    modelo_v2_demand = lgb.LGBMRegressor(**PARAMS_V2_DEMAND)
-    modelo_v2_demand.fit(
+    model_v2_demand = lgb.LGBMRegressor(**PARAMS_V2_DEMAND)
+    model_v2_demand.fit(
         X_train_d, y_train_d,
         eval_set=[(X_test_d, y_test_d)],
         callbacks=[lgb.early_stopping(50, verbose=False)],
     )
 
-    y_pred_v2_d = modelo_v2_demand.predict(X_test_d)
+    y_pred_v2_d = model_v2_demand.predict(X_test_d)
 
     rmse_v2 = round(root_mean_squared_error(y_test_d, y_pred_v2_d), 4)
     mae_v2  = round(mean_absolute_error(y_test_d, y_pred_v2_d),     4)
@@ -386,11 +376,11 @@ with mlflow.start_run(run_name="lgbm_demand_v2_challenger") as run_v2_demand:
     mlflow.log_metric("mae",  mae_v2)
     mlflow.log_metric("r2",   r2_v2)
 
-    mlflow.sklearn.log_model(modelo_v2_demand, "model")
+    mlflow.sklearn.log_model(model_v2_demand, "model")
 
 print(f"Demand v2 (challenger) — RMSE={rmse_v2} | MAE={mae_v2} | R²={r2_v2}")
 
-resultados.append({
+results.append({
     "test_date":       TODAY,
     "modelo":          "demand_forecast",
     "versao":          "v2",
@@ -417,7 +407,7 @@ vencedor_demand = "v2" if rmse_v2 < rmse_v1 else "v1"
 delta_rmse      = round(rmse_v2 - rmse_v1, 4)
 delta_r2        = round(r2_v2 - r2_v1, 4)
 
-for r in resultados:
+for r in results:
     if r["modelo"] == "demand_forecast" and r["versao"] == vencedor_demand:
         r["vencedor"] = True
 
@@ -433,12 +423,7 @@ print(f"  {icone} VENCEDOR: {vencedor_demand.upper()} ({'challenger promovido' i
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 5. Persistir resultados
-
-# COMMAND ----------
-
-df_ab = spark.createDataFrame(resultados) \
+df_ab = spark.createDataFrame(results) \
     .withColumn("test_date", F.to_date(F.col("test_date")))
 
 df_ab.write \
@@ -446,12 +431,7 @@ df_ab.write \
     .mode("append") \
     .saveAsTable("retail_lakehouse.gold.ab_test_results")
 
-print(f"\n✔ {len(resultados)} resultados registrados em gold.ab_test_results")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 6. Relatório final
+print(f"\n✔ {len(results)} resultados registrados em gold.ab_test_results")
 
 # COMMAND ----------
 

@@ -26,18 +26,13 @@ from pyspark.sql.types import (
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## vendas
-
-# COMMAND ----------
-
 # Schema explícito da tabela de vendas.
 # Definir o schema manualmente (em vez de inferir) é uma boa prática:
 # - Mais rápido: não precisa fazer scan dos dados para inferir tipos
 # - Mais seguro: campos inesperados são ignorados, não causam falha
 # - Mais claro: documenta o contrato esperado dos dados
 
-schema_vendas = StructType([
+SCHEMA_SALES = StructType([
     StructField("venda_id",       StringType(),    nullable=False),
     StructField("timestamp",      StringType(),    nullable=True),   # chega como string ISO
     StructField("loja_id",        StringType(),    nullable=False),
@@ -66,12 +61,20 @@ schema_vendas = StructType([
 @dlt.expect_or_drop("desconto_valido",     "desconto_pct >= 0 AND desconto_pct <= 1")
 @dlt.expect("canal_valido",               "canal IN ('fisico', 'online')")  # só monitora, não descarta
 def vendas():
+    """Read raw sales events from Bronze, parse JSON, validate and enrich with derived columns.
+
+    Applies expect_or_drop rules — records that violate them are silently discarded
+    and counted in the DLT pipeline metrics for monitoring.
+
+    Returns:
+        DLT streaming DataFrame with cleaned and enriched sales records.
+    """
     return (
         # dlt.read_stream lê da tabela Bronze em modo streaming
         dlt.read_stream("raw_vendas")
         .select(
             # from_json: extrai os campos do JSON usando o schema definido acima
-            F.from_json(F.col("payload"), schema_vendas).alias("data"),
+            F.from_json(F.col("payload"), SCHEMA_SALES).alias("data"),
             "ingested_at",
             "kafka_timestamp",
         )
@@ -108,12 +111,7 @@ def vendas():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## estoque
-
-# COMMAND ----------
-
-schema_estoque = StructType([
+SCHEMA_INVENTORY = StructType([
     StructField("evento_id",      StringType(),  nullable=False),
     StructField("timestamp",      StringType(),  nullable=True),
     StructField("loja_id",        StringType(),  nullable=False),
@@ -136,10 +134,15 @@ schema_estoque = StructType([
 @dlt.expect_or_drop("estoque_nao_negativo","estoque_atual >= 0")
 @dlt.expect("movimento_valido",            "tipo_movimento IN ('saida', 'entrada', 'ajuste', 'transferencia')")
 def estoque():
+    """Read raw inventory movement events from Bronze, parse JSON and validate quality rules.
+
+    Returns:
+        DLT streaming DataFrame with cleaned inventory movement records.
+    """
     return (
         dlt.read_stream("raw_estoque")
         .select(
-            F.from_json(F.col("payload"), schema_estoque).alias("data"),
+            F.from_json(F.col("payload"), SCHEMA_INVENTORY).alias("data"),
             "ingested_at",
         )
         .select("data.*", "ingested_at")
@@ -158,12 +161,7 @@ def estoque():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## clientes
-
-# COMMAND ----------
-
-schema_clientes = StructType([
+SCHEMA_CUSTOMERS = StructType([
     StructField("cliente_id",      StringType(), nullable=False),
     StructField("timestamp",       StringType(), nullable=True),
     StructField("tipo_evento",     StringType(), nullable=True),
@@ -184,10 +182,15 @@ schema_clientes = StructType([
 @dlt.expect_or_drop("tipo_evento_valido",  "tipo_evento IN ('cadastro', 'atualizacao', 'inativacao')")
 @dlt.expect("uf_valida",                   "uf IN ('SP','RJ','MG','RS','PR','BA','CE','GO','SC','PE','AM','PA','MT','MS','ES','RN','PB','AL','PI','MA','RO','AC','AP','RR','TO','SE','DF')")
 def clientes():
+    """Read raw customer events from Bronze, parse JSON and validate quality rules.
+
+    Returns:
+        DLT streaming DataFrame with cleaned customer profile records.
+    """
     return (
         dlt.read_stream("raw_clientes")
         .select(
-            F.from_json(F.col("payload"), schema_clientes).alias("data"),
+            F.from_json(F.col("payload"), SCHEMA_CUSTOMERS).alias("data"),
             "ingested_at",
         )
         .select("data.*", "ingested_at")
@@ -197,12 +200,7 @@ def clientes():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## pagamentos
-
-# COMMAND ----------
-
-schema_pagamentos = StructType([
+SCHEMA_PAYMENTS = StructType([
     StructField("pagamento_id", StringType(),  nullable=False),
     StructField("venda_id",     StringType(),  nullable=False),
     StructField("timestamp",    StringType(),  nullable=True),
@@ -223,10 +221,15 @@ schema_pagamentos = StructType([
 @dlt.expect_or_drop("status_valido",         "status IN ('aprovado', 'recusado', 'estorno')")
 @dlt.expect("metodo_valido",                 "metodo IN ('pix', 'debito', 'credito', 'dinheiro')")
 def pagamentos():
+    """Read raw payment events from Bronze, parse JSON and validate quality rules.
+
+    Returns:
+        DLT streaming DataFrame with cleaned payment records.
+    """
     return (
         dlt.read_stream("raw_pagamentos")
         .select(
-            F.from_json(F.col("payload"), schema_pagamentos).alias("data"),
+            F.from_json(F.col("payload"), SCHEMA_PAYMENTS).alias("data"),
             "ingested_at",
         )
         .select("data.*", "ingested_at")

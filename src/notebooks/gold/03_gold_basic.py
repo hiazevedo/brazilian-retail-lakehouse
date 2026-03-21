@@ -16,11 +16,6 @@
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Vendas por Loja e Dia
-
-# COMMAND ----------
-
 # Agrega as vendas da Silver por loja e dia.
 # Esta é a tabela base para dashboards de performance de loja.
 #
@@ -78,11 +73,6 @@ display(spark.table("retail_lakehouse.gold.vendas_por_loja_dia").orderBy("data",
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Top Produtos
-
-# COMMAND ----------
-
 # Ranking de produtos por volume total vendido.
 # Útil para gestão de estoque e decisões de compra.
 #
@@ -130,11 +120,6 @@ display(
     .orderBy("receita_total", ascending=False)
     .limit(10)
 )
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Status de Pagamentos
 
 # COMMAND ----------
 
@@ -266,9 +251,9 @@ spark.sql("""
 """)
 
 count = spark.table("retail_lakehouse.gold.estoque_atual").count()
-criticos = spark.sql("SELECT COUNT(*) FROM retail_lakehouse.gold.estoque_atual WHERE status_estoque = 'critico'").collect()[0][0]
+critical_count = spark.sql("SELECT COUNT(*) FROM retail_lakehouse.gold.estoque_atual WHERE status_estoque = 'critico'").collect()[0][0]
 print(f"✔ estoque_atual: {count:,} combinações produto+loja")
-print(f"⚠ Produtos em estoque crítico: {criticos:,}")
+print(f"⚠ Produtos em estoque crítico: {critical_count:,}")
 display(
     spark.table("retail_lakehouse.gold.estoque_atual")
     .orderBy("estoque_atual")
@@ -277,24 +262,19 @@ display(
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Resumo Final
-
-# COMMAND ----------
-
 print("=" * 55)
 print("GOLD BASIC — RESUMO")
 print("=" * 55)
 
-tabelas = [
+tables = [
     "gold.vendas_por_loja_dia",
     "gold.top_produtos",
     "gold.status_pagamentos",
     "gold.estoque_atual",
 ]
 
-for tabela in tabelas:
-    count = spark.table(f"retail_lakehouse.{tabela}").count()
-    print(f"✔ {tabela}: {count:,} registros")
+for table in tables:
+    count = spark.table(f"retail_lakehouse.{table}").count()
+    print(f"✔ {table}: {count:,} registros")
 
 print("\n✔ Phase 1 completa — pipeline end-to-end funcionando")

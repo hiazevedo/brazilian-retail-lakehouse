@@ -18,11 +18,6 @@ from datetime import date
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Criar tabela de histórico de drift
-
-# COMMAND ----------
-
 spark.sql("""
     CREATE TABLE IF NOT EXISTS retail_lakehouse.observability.model_drift (
         check_date      DATE      COMMENT 'Data da verificação',
@@ -77,17 +72,20 @@ def calcular_psi(base: np.ndarray, atual: np.ndarray, bins: int = 10) -> float:
 
 
 def classificar_drift(psi: float) -> str:
+    """Classify the drift level based on PSI thresholds.
+
+    Args:
+        psi: Population Stability Index value.
+
+    Returns:
+        'ESTAVEL' if PSI < 0.1, 'MONITORAR' if 0.1 <= PSI < 0.2, 'RETREINAR' otherwise.
+    """
     if psi < 0.1:
         return "ESTAVEL"
     elif psi < 0.2:
         return "MONITORAR"
     else:
         return "RETREINAR"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Drift do Fraud Detector
 
 # COMMAND ----------
 
@@ -111,7 +109,7 @@ FEATURES_FRAUD = [
 print("DRIFT — FRAUD DETECTOR")
 print("=" * 55)
 
-resultados_drift = []
+drift_results = []
 CHECK_DATE = date.today().isoformat()
 
 for feature in FEATURES_FRAUD:
@@ -134,7 +132,7 @@ for feature in FEATURES_FRAUD:
     print(f"     Treino: média={media_treino:>8.2f} | desvio={desvio_treino:.2f}")
     print(f"     Atual : média={media_atual:>8.2f} | desvio={desvio_atual:.2f}")
 
-    resultados_drift.append({
+    drift_results.append({
         "check_date":    CHECK_DATE,
         "modelo":        "fraud_detector",
         "feature":       feature,
@@ -145,11 +143,6 @@ for feature in FEATURES_FRAUD:
         "desvio_treino": desvio_treino,
         "desvio_atual":  desvio_atual,
     })
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 4. Drift do Demand Forecast
 
 # COMMAND ----------
 
@@ -186,7 +179,7 @@ for feature in FEATURES_DEMAND:
     icone = "🟢" if status == "ESTAVEL" else "🟡" if status == "MONITORAR" else "🔴"
     print(f"  {icone} {feature:<25} PSI={psi:.4f} → {status}")
 
-    resultados_drift.append({
+    drift_results.append({
         "check_date":    CHECK_DATE,
         "modelo":        "demand_forecast",
         "feature":       feature,
@@ -200,12 +193,7 @@ for feature in FEATURES_DEMAND:
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 5. Persistir e exibir resultados
-
-# COMMAND ----------
-
-df_drift = spark.createDataFrame(resultados_drift) \
+df_drift = spark.createDataFrame(drift_results) \
     .withColumn("check_date", F.to_date(F.col("check_date")))
 
 df_drift.write \

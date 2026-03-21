@@ -23,7 +23,7 @@ from pyspark.sql import functions as F
 # Mapeamento entre contract_id e tabela Silver correspondente.
 # Usado para saber em qual tabela aplicar cada conjunto de regras.
 
-TABELA_POR_CONTRATO = {
+TABLE_BY_CONTRACT = {
     "retail.vendas":     "retail_lakehouse.silver.vendas",
     "retail.estoque":    "retail_lakehouse.silver.estoque",
     "retail.clientes":   "retail_lakehouse.silver.clientes",
@@ -39,15 +39,10 @@ print(f"Run Date: {RUN_DATE}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Carregar contratos ativos
-
-# COMMAND ----------
-
 # Busca todos os contratos com status 'active' do registry.
 # Apenas contratos ativos são validados — contratos deprecated são ignorados.
 
-contratos_ativos = spark.sql("""
+active_contracts = spark.sql("""
     SELECT
         contract_id,
         version,
@@ -57,34 +52,35 @@ contratos_ativos = spark.sql("""
     ORDER BY contract_id
 """).collect()
 
-print(f"✔ {len(contratos_ativos)} contratos ativos encontrados")
-for c in contratos_ativos:
+print(f"✔ {len(active_contracts)} contratos ativos encontrados")
+for c in active_contracts:
     print(f"  → {c.contract_id} v{c.version}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Executar validações
-
-# COMMAND ----------
-
 def validar_contrato(contract_id: str, version: str, quality_rules_json: str) -> list:
+    """Run all quality rules of a contract against the corresponding Silver table.
+
+    Args:
+        contract_id: Contract identifier (e.g. 'retail.vendas').
+        version: Contract version string.
+        quality_rules_json: JSON string with the list of quality rules.
+
+    Returns:
+        List of violation dicts found during validation.
     """
-    Executa todas as regras de qualidade de um contrato contra a tabela Silver.
-    Retorna lista de violações encontradas.
-    """
-    tabela = TABELA_POR_CONTRATO.get(contract_id)
+    tabela = TABLE_BY_CONTRACT.get(contract_id)
     if not tabela:
         print(f"  ⚠ Tabela não mapeada para contrato: {contract_id} — pulando")
         return []
 
-    regras = json.loads(quality_rules_json)
-    violacoes = []
+    rules = json.loads(quality_rules_json)
+    violations = []
 
-    for regra in regras:
-        rule_sql    = regra["rule"]
-        severity    = regra["severity"]
-        description = regra.get("description", rule_sql)
+    for rule in rules:
+        rule_sql    = rule["rule"]
+        severity    = rule["severity"]
+        description = rule.get("description", rule_sql)
 
         # Conta quantos registros violam a regra
         # A regra é uma expressão SQL válida — negamos para encontrar violações
@@ -105,7 +101,7 @@ def validar_contrato(contract_id: str, version: str, quality_rules_json: str) ->
             """).collect()
             sample_str = json.dumps([r["row_json"] for r in samples], ensure_ascii=False)
 
-            violacoes.append({
+            violations.append({
                 "contract_id":     contract_id,
                 "version":         version,
                 "table_full_name": tabela,
@@ -120,51 +116,41 @@ def validar_contrato(contract_id: str, version: str, quality_rules_json: str) ->
         else:
             print(f"  ✔ {description}: OK")
 
-    return violacoes
+    return violations
 
 # Executa validações para todos os contratos ativos
-todas_violacoes = []
+all_violations = []
 
-for contrato in contratos_ativos:
+for contract in active_contracts:
     print(f"\n{'='*55}")
-    print(f"Validando: {contrato.contract_id} v{contrato.version}")
+    print(f"Validando: {contract.contract_id} v{contract.version}")
     print(f"{'='*55}")
 
-    violacoes = validar_contrato(
-        contrato.contract_id,
-        contrato.version,
-        contrato.quality_rules_json,
+    violations = validar_contrato(
+        contract.contract_id,
+        contract.version,
+        contract.quality_rules_json,
     )
-    todas_violacoes.extend(violacoes)
+    all_violations.extend(violations)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 3. Registrar violações
-
-# COMMAND ----------
-
-if todas_violacoes:
+if all_violations:
     # Converte a lista de violações para DataFrame e insere na tabela
-    df_violacoes = spark.createDataFrame(todas_violacoes).withColumns({
+    df_violations = spark.createDataFrame(all_violations).withColumns({
         "detected_at": F.current_timestamp(),
         "run_id":      F.lit(RUN_ID),
         "run_date":    F.lit(RUN_DATE).cast("date"),
     })
 
-    df_violacoes.write \
+    df_violations.write \
         .format("delta") \
         .mode("append") \
         .saveAsTable("retail_lakehouse.contracts.violations")
 
-    print(f"\n✔ {len(todas_violacoes)} violações registradas em contracts.violations")
+    print(f"\n✔ {len(all_violations)} violações registradas em contracts.violations")
 else:
     print("\n✔ Nenhuma violação encontrada — todos os contratos estão em conformidade")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 4. Relatório de conformidade
 
 # COMMAND ----------
 
@@ -193,15 +179,15 @@ display(spark.sql("""
 # Se houver, levanta um erro para sinalizar ao Databricks Workflow
 # que este job falhou — isso aciona alertas e bloqueia jobs dependentes.
 
-violacoes_criticas = [v for v in todas_violacoes if v["severity"] == "CRITICAL"]
+critical_violations = [v for v in all_violations if v["severity"] == "CRITICAL"]
 
-if violacoes_criticas:
+if critical_violations:
     resumo = "\n".join([
         f"  - {v['contract_id']}: {v['rule_name']} ({v['violation_count']:,} registros)"
-        for v in violacoes_criticas
+        for v in critical_violations
     ])
     raise Exception(
-        f"❌ {len(violacoes_criticas)} violação(ões) CRITICAL detectada(s):\n{resumo}\n"
+        f"❌ {len(critical_violations)} violação(ões) CRITICAL detectada(s):\n{resumo}\n"
         f"Verifique contracts.violations para detalhes (run_id={RUN_ID})"
     )
 

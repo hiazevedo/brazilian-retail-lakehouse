@@ -26,11 +26,6 @@ from datetime import datetime
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Criar tabelas de destino
-
-# COMMAND ----------
-
 spark.sql("""
     CREATE TABLE IF NOT EXISTS retail_lakehouse.gold.fraud_scores (
         scored_at        TIMESTAMP COMMENT 'Momento em que o score foi gerado',
@@ -64,18 +59,17 @@ print("✔ Tabelas gold.fraud_scores e gold.demand_scores criadas")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Função auxiliar: buscar run mais recente
+def get_latest_run(experiment_name: str) -> tuple[str, object]:
+    """Return the most recent MLflow run and its loaded model for a given experiment.
 
-# COMMAND ----------
+    Since the Model Registry is not available in Free Edition, uses search_runs()
+    ordered by start_time to always retrieve the most current model.
 
-def buscar_run_mais_recente(experiment_name: str) -> tuple[str, object]:
-    """
-    Busca o run mais recente de um experimento MLflow e retorna
-    o run_id e o modelo carregado.
+    Args:
+        experiment_name: Short experiment name (e.g. 'fraud_detector').
 
-    Como não temos Model Registry no Free Edition, usamos search_runs()
-    ordenado por start_time para pegar sempre o modelo mais atual.
+    Returns:
+        Tuple of (run_id, loaded sklearn-compatible model).
     """
     current_user = (
         spark.sql("SELECT current_user() AS u").collect()[0]["u"]
@@ -91,25 +85,20 @@ def buscar_run_mais_recente(experiment_name: str) -> tuple[str, object]:
         raise ValueError(f"Nenhum run encontrado para o experimento: {full_name}")
 
     run_id = runs.iloc[0]["run_id"]
-    modelo = mlflow.sklearn.load_model(f"runs:/{run_id}/model")
+    model = mlflow.sklearn.load_model(f"runs:/{run_id}/model")
 
     print(f"  Experimento : {full_name}")
     print(f"  Run ID      : {run_id}")
     print(f"  Iniciado em : {runs.iloc[0]['start_time']}")
 
-    return run_id, modelo
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Scoring — Fraud Detector
+    return run_id, model
 
 # COMMAND ----------
 
 print("BATCH SCORING — FRAUD DETECTOR")
 print("=" * 55)
 
-run_id_fraud, modelo_fraud = buscar_run_mais_recente("fraud_detector")
+run_id_fraud, model_fraud = get_latest_run("fraud_detector")
 
 # Carrega a feature table completa
 df_fraud = spark.table("retail_lakehouse.ml_features.fraud_features").toPandas()
@@ -130,21 +119,21 @@ FEATURES_FRAUD = [
 X_fraud = df_fraud[FEATURES_FRAUD].fillna(0)
 
 # predict_proba retorna [prob_normal, prob_fraude] — pegamos a coluna 1
-prob_fraude = modelo_fraud.predict_proba(X_fraud)[:, 1]
+fraud_prob = model_fraud.predict_proba(X_fraud)[:, 1]
 
-df_fraud["prob_fraude"]   = prob_fraude.round(4)
-df_fraud["predicao"]      = np.where(prob_fraude >= 0.5, "FRAUDE", "NORMAL")
+df_fraud["prob_fraude"]   = fraud_prob.round(4)
+df_fraud["predicao"]      = np.where(fraud_prob >= 0.5, "FRAUDE", "NORMAL")
 df_fraud["modelo_run_id"] = run_id_fraud
 df_fraud["scored_at"]     = datetime.utcnow()
 
 # Seleciona apenas as colunas da tabela de destino
-colunas_fraud = [
+fraud_columns = [
     "scored_at", "venda_id", "cliente_id",
     "valor_total", "parcelas", "hora_dia",
     "prob_fraude", "predicao", "modelo_run_id",
 ]
 
-df_scores_fraud = spark.createDataFrame(df_fraud[colunas_fraud]) \
+df_scores_fraud = spark.createDataFrame(df_fraud[fraud_columns]) \
     .withColumn("scored_at", F.to_timestamp(F.col("scored_at"))) \
     .withColumn("parcelas",  F.col("parcelas").cast("int"))
 
@@ -154,34 +143,29 @@ df_scores_fraud.write \
     .option("overwriteSchema", "true") \
     .saveAsTable("retail_lakehouse.gold.fraud_scores")
 
-n_fraudes = int((prob_fraude >= 0.5).sum())
+n_fraudes = int((fraud_prob >= 0.5).sum())
 print(f"\n✔ {len(df_fraud):,} transações pontuadas")
 print(f"  Predições FRAUDE : {n_fraudes:,} ({n_fraudes / len(df_fraud) * 100:.1f}%)")
 print(f"  Predições NORMAL : {len(df_fraud) - n_fraudes:,}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 4. Scoring — Demand Forecast
-
-# COMMAND ----------
-
 print("\nBATCH SCORING — DEMAND FORECAST")
 print("=" * 55)
 
-run_id_demand, modelo_demand = buscar_run_mais_recente("demand_forecast")
+run_id_demand, model_demand = get_latest_run("demand_forecast")
 
 df_demand = spark.table("retail_lakehouse.ml_features.demand_features").toPandas()
 
 # Reaplica o mesmo encoding do treinamento (08_demand_forecast)
 # LabelEncoder precisa ser fit nos mesmos dados para gerar os mesmos códigos
 from sklearn.preprocessing import LabelEncoder
-le_produto = LabelEncoder()
-le_loja    = LabelEncoder()
+le_product = LabelEncoder()
+le_store   = LabelEncoder()
 le_status  = LabelEncoder()
 
-df_demand["produto_enc"] = le_produto.fit_transform(df_demand["produto_id"])
-df_demand["loja_enc"]    = le_loja.fit_transform(df_demand["loja_id"])
+df_demand["produto_enc"] = le_product.fit_transform(df_demand["produto_id"])
+df_demand["loja_enc"]    = le_store.fit_transform(df_demand["loja_id"])
 df_demand["status_enc"]  = le_status.fit_transform(df_demand["status_estoque"])
 
 FEATURES_DEMAND = [
@@ -199,19 +183,19 @@ FEATURES_DEMAND = [
 
 X_demand = df_demand[FEATURES_DEMAND].fillna(0)
 
-previsao = modelo_demand.predict(X_demand)
+forecast = model_demand.predict(X_demand)
 
-df_demand["previsao_demanda"] = previsao.round(2)
+df_demand["previsao_demanda"] = forecast.round(2)
 df_demand["modelo_run_id"]    = run_id_demand
 df_demand["scored_at"]        = datetime.utcnow()
 
-colunas_demand = [
+demand_columns = [
     "scored_at", "produto_id", "loja_id",
     "media_qtd_7d", "media_qtd_30d", "estoque_atual",
     "previsao_demanda", "modelo_run_id",
 ]
 
-df_scores_demand = spark.createDataFrame(df_demand[colunas_demand]) \
+df_scores_demand = spark.createDataFrame(df_demand[demand_columns]) \
     .withColumn("scored_at", F.to_timestamp(F.col("scored_at")))
 
 df_scores_demand.write \
@@ -221,13 +205,8 @@ df_scores_demand.write \
     .saveAsTable("retail_lakehouse.gold.demand_scores")
 
 print(f"\n✔ {len(df_demand):,} combinações produto/loja pontuadas")
-print(f"  Demanda prevista média : {previsao.mean():.1f} unidades")
-print(f"  Demanda prevista máx  : {previsao.max():.1f} unidades")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 5. Resumo dos scores gerados
+print(f"  Demanda prevista média : {forecast.mean():.1f} unidades")
+print(f"  Demanda prevista máx  : {forecast.max():.1f} unidades")
 
 # COMMAND ----------
 
@@ -254,11 +233,6 @@ display(spark.sql("""
         MAX(scored_at)                             AS ultima_execucao
     FROM retail_lakehouse.gold.demand_scores
 """))
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 6. Top 20 transações com maior risco de fraude
 
 # COMMAND ----------
 

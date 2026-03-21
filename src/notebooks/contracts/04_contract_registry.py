@@ -36,18 +36,13 @@ from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 VOLUME_PATH = "/Volumes/retail_lakehouse/contracts/schemas"
 BUNDLE_PATH = "/Workspace/Users/higor_com@hotmail.com/.bundle/brazilian-retail-lakehouse/dev/files/contracts"
 
-contratos = ["vendas_v1", "estoque_v1", "clientes_v1", "pagamentos_v1"]
+contract_names = ["vendas_v1", "estoque_v1", "clientes_v1", "pagamentos_v1"]
 
-for contrato in contratos:
-    src  = f"{BUNDLE_PATH}/{contrato}.yaml"
-    dest = f"{VOLUME_PATH}/{contrato}.yaml"
+for contract in contract_names:
+    src  = f"{BUNDLE_PATH}/{contract}.yaml"
+    dest = f"{VOLUME_PATH}/{contract}.yaml"
     dbutils.fs.cp(src, dest, recurse=False)
-    print(f"✔ Copiado: {contrato}.yaml → Volume UC")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 2. Criar tabelas do Registry
+    print(f"✔ Copiado: {contract}.yaml → Volume UC")
 
 # COMMAND ----------
 
@@ -91,11 +86,6 @@ spark.sql("""
 """)
 
 print("✔ Tabelas contracts.registry e contracts.violations criadas")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Parse dos YAMLs e carga no Registry
 
 # COMMAND ----------
 
@@ -162,13 +152,8 @@ def parse_and_register_contract(contract_name: str):
     print(f"✔ Contrato registrado: {contract_id} v{version}")
 
 # Processa os 4 contratos
-for contrato in contratos:
-    parse_and_register_contract(contrato)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 4. Validação
+for contract in contract_names:
+    parse_and_register_contract(contract)
 
 # COMMAND ----------
 

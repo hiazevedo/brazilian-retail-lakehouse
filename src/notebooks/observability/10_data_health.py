@@ -17,11 +17,6 @@ from datetime import datetime, date
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Criar tabela de histórico
-
-# COMMAND ----------
-
 spark.sql("""
     CREATE TABLE IF NOT EXISTS retail_lakehouse.observability.data_health (
         check_date       DATE      COMMENT 'Data da verificação',
@@ -51,7 +46,7 @@ print("✔ Tabela observability.data_health criada")
 # COMMAND ----------
 
 # Definição de cada domínio: tabela Silver, colunas-chave e SLA de freshness
-DOMINIOS = {
+DOMAINS = {
     "vendas": {
         "tabela":         "retail_lakehouse.silver.vendas",
         "col_id":         "venda_id",
@@ -87,14 +82,9 @@ CHECK_DATE = date.today().isoformat()
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 3. Executar verificações
+results = []
 
-# COMMAND ----------
-
-resultados = []
-
-for dominio, cfg in DOMINIOS.items():
+for domain, cfg in DOMAINS.items():
     tabela        = cfg["tabela"]
     col_id        = cfg["col_id"]
     col_ts        = cfg["col_ts"]
@@ -102,7 +92,7 @@ for dominio, cfg in DOMINIOS.items():
     min_volume    = cfg["min_volume_dia"]
 
     print(f"\n{'='*50}")
-    print(f"Verificando: {dominio}")
+    print(f"Verificando: {domain}")
     print(f"{'='*50}")
 
     # --- Volume ---
@@ -162,11 +152,11 @@ for dominio, cfg in DOMINIOS.items():
 
     print(f"  Health Score: {score}/100")
 
-    resultados.append({
+    results.append({
         "check_date":       CHECK_DATE,
         "check_ts":         str(CHECK_TS),
         "tabela":           tabela,
-        "dominio":          dominio,
+        "dominio":          domain,
         "volume_hoje":      volume_hoje,
         "volume_media_7d":  volume_media,
         "volume_status":    volume_status,
@@ -180,12 +170,7 @@ for dominio, cfg in DOMINIOS.items():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 4. Persistir resultados
-
-# COMMAND ----------
-
-df_health = spark.createDataFrame(resultados).withColumns({
+df_health = spark.createDataFrame(results).withColumns({
     "check_ts":    F.to_timestamp(F.col("check_ts")),
     "check_date":  F.to_date(F.col("check_date")),
     "freshness_sla": F.col("freshness_sla").cast("int"),
@@ -198,12 +183,7 @@ df_health.write \
     .mode("append") \
     .saveAsTable("retail_lakehouse.observability.data_health")
 
-print(f"\n✔ {len(resultados)} verificações registradas em observability.data_health")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 5. Resumo executivo
+print(f"\n✔ {len(results)} verificações registradas em observability.data_health")
 
 # COMMAND ----------
 

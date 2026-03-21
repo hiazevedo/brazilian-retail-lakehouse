@@ -72,7 +72,7 @@ display(spark.sql("""
 # freshness_minutes é o tempo máximo aceitável desde o último evento.
 # Se o último evento foi há mais tempo que o SLA, o contrato está em risco.
 
-TABELAS_SILVER = {
+SILVER_TABLES = {
     "retail.vendas":     "retail_lakehouse.silver.vendas",
     "retail.estoque":    "retail_lakehouse.silver.estoque",
     "retail.clientes":   "retail_lakehouse.silver.clientes",
@@ -81,18 +81,18 @@ TABELAS_SILVER = {
 
 freshness_rows = []
 
-contratos = spark.sql("""
+active_contracts = spark.sql("""
     SELECT contract_id, version, sla_json
     FROM retail_lakehouse.contracts.registry
     WHERE status = 'active'
 """).collect()
 
-for contrato in contratos:
-    tabela = TABELAS_SILVER.get(contrato.contract_id)
+for contract in active_contracts:
+    tabela = SILVER_TABLES.get(contract.contract_id)
     if not tabela:
         continue
 
-    sla = json.loads(contrato.sla_json)
+    sla = json.loads(contract.sla_json)
     freshness_sla = sla.get("freshness_minutes", 60)
     min_volume    = sla.get("min_daily_volume", 0)
 
@@ -126,7 +126,7 @@ for contrato in contratos:
         status_volume = f"🟢 OK ({volume_hoje:,} eventos)"
 
     freshness_rows.append({
-        "contract_id":      contrato.contract_id,
+        "contract_id":      contract.contract_id,
         "ultimo_evento":    str(ultimo_evento),
         "minutos_atraso":   round(float(minutos_atrasado), 1),
         "freshness_sla":    freshness_sla,
@@ -138,11 +138,6 @@ for contrato in contratos:
 
 df_freshness = spark.createDataFrame(freshness_rows)
 display(df_freshness)
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Tendência de Violações — Últimos 30 dias
 
 # COMMAND ----------
 
@@ -164,11 +159,6 @@ display(spark.sql("""
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 4. Top Regras Mais Violadas
-
-# COMMAND ----------
-
 # Identifica quais regras de qualidade são violadas com mais frequência.
 # Regras que aparecem repetidamente são candidatas a revisão no contrato
 # ou indicam problemas estruturais no produtor de dados.
@@ -186,11 +176,6 @@ display(spark.sql("""
     ORDER BY total_registros_afetados DESC
     LIMIT 20
 """))
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 5. Resumo Executivo
 
 # COMMAND ----------
 

@@ -29,11 +29,6 @@ mlflow.autolog(disable=True)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 1. Carregar features
-
-# COMMAND ----------
-
 # Lê a feature table gerada pelo notebook 07
 df = spark.table("retail_lakehouse.ml_features.demand_features").toPandas()
 
@@ -42,19 +37,14 @@ print(f"  Colunas: {list(df.columns)}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 2. Preparar dados para treino
-
-# COMMAND ----------
-
 # Codifica variáveis categóricas como números
 # LightGBM aceita strings nativamente, mas o MLflow precisa de tipos consistentes
-le_produto = LabelEncoder()
-le_loja    = LabelEncoder()
+le_product = LabelEncoder()
+le_store    = LabelEncoder()
 le_status  = LabelEncoder()
 
-df["produto_enc"] = le_produto.fit_transform(df["produto_id"])
-df["loja_enc"]    = le_loja.fit_transform(df["loja_id"])
+df["produto_enc"] = le_product.fit_transform(df["produto_id"])
+df["loja_enc"]    = le_store.fit_transform(df["loja_id"])
 df["status_enc"]  = le_status.fit_transform(df["status_estoque"])
 
 # Features usadas no modelo
@@ -83,11 +73,6 @@ X_train, X_val, y_train, y_val = train_test_split(
 
 print(f"✔ Treino : {len(X_train):,} linhas")
 print(f"✔ Validação: {len(X_val):,} linhas")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 3. Treinar modelo com MLflow
 
 # COMMAND ----------
 
@@ -158,36 +143,26 @@ with mlflow.start_run(run_name="lgbm_demand_v1"):
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 4. Importância das features
-
-# COMMAND ----------
-
 # Mostra quais features mais influenciaram o modelo
-importancia = pd.DataFrame({
+feature_importance = pd.DataFrame({
     "feature":    FEATURES,
-    "importancia": modelo.feature_importances_,
-}).sort_values("importancia", ascending=False)
+    "feature_importance": modelo.feature_importances_,
+}).sort_values("feature_importance", ascending=False)
 
 print("\nImportância das features:")
-for _, row in importancia.iterrows():
-    barra = "█" * int(row["importancia"] / importancia["importancia"].max() * 30)
-    print(f"  {row['feature']:<22} {barra} {row['importancia']:.0f}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## 5. Exemplo de previsão
+for _, row in feature_importance.iterrows():
+    barra = "█" * int(row["feature_importance"] / feature_importance["feature_importance"].max() * 30)
+    print(f"  {row['feature']:<22} {barra} {row['feature_importance']:.0f}")
 
 # COMMAND ----------
 
 # Demonstra o modelo fazendo uma previsão para as primeiras 5 lojas do PROD-0000
-amostra = df[df["produto_id"] == "PROD-0000"].head(5)[FEATURES]
-previsoes = modelo.predict(amostra)
+sample = df[df["produto_id"] == "PROD-0000"].head(5)[FEATURES]
+predictions = modelo.predict(sample)
 
 print("\nExemplo de previsão — PROD-0000:")
 print(f"{'Loja':<10} {'Real':>8} {'Previsto':>10}")
 print("-" * 30)
-for i, (real, prev) in enumerate(zip(df[df["produto_id"] == "PROD-0000"].head(5)[TARGET], previsoes)):
-    loja = df[df["produto_id"] == "PROD-0000"].head(5)["loja_id"].iloc[i]
-    print(f"{loja:<10} {real:>8.0f} {prev:>10.0f}")
+for i, (real, pred) in enumerate(zip(df[df["produto_id"] == "PROD-0000"].head(5)[TARGET], predictions)):
+    store = df[df["produto_id"] == "PROD-0000"].head(5)["loja_id"].iloc[i]
+    print(f"{store:<10} {real:>8.0f} {pred:>10.0f}")
