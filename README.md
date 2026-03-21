@@ -83,7 +83,7 @@ O projeto é **intencionalmente evolutivo** — cada etapa adiciona uma camada d
 | **Etapa 3** | Camada dbt — Modelo dimensional + semantic layer | ✅ Concluída |
 | **Etapa 4** | Plataforma de ML — Previsão de demanda + detecção de fraude | ✅ Concluída |
 | **Etapa 5** | Observabilidade — Data health + SLA + drift monitoring | ✅ Concluída |
-| **Etapa 6** | Avançado — Feature Store online + Model Serving + A/B test | ⏳ Planejada |
+| **Etapa 6** | Operacionalização de ML — Feature Store + Batch Scoring + A/B Test | ✅ Concluída |
 
 ---
 
@@ -262,6 +262,51 @@ Todos os 8 checks (3 features do demand_forecast + 5 do fraud_detector) saíram 
 
 ---
 
+## Etapa 6 — Operacionalização de ML
+
+Fecha o ciclo do pipeline de ML: as features treinadas na Etapa 4 agora são documentadas no Unity Catalog, aplicadas em batch sobre toda a base e avaliadas via experimento controlado A/B.
+
+**Fluxo**
+
+```
+ml_features (Etapa 4)
+    │
+    ▼
+13_feature_store       Documenta demand_features e fraud_features no Unity Catalog
+    │                  com metadata, tags e feature catalog
+    ▼
+14_batch_scoring       Aplica demand_forecast e fraud_detector sobre toda a base
+    ├── gold.demand_predictions    previsão de demanda por produto/loja
+    └── gold.fraud_predictions     score de fraude por transação
+    │
+    ▼
+15_ab_test             Compara champion vs challenger para ambos os modelos
+                       usando os dados de produção do batch scoring
+```
+
+**Batch Scoring**
+
+| Modelo | Tabela de destino | Volume |
+|--------|------------------|--------|
+| `demand_forecast` | `gold.demand_predictions` | ~3.500 linhas (produto × loja) |
+| `fraud_detector` | `gold.fraud_predictions` | ~749K transações |
+
+**A/B Test — Metodologia**
+
+- Divide os dados de produção em champion (60%) vs challenger (40%)
+- Avalia ambos os modelos com as mesmas métricas do treino (F1, AUC, RMSE, MAE, R²)
+- Registra resultados em `gold.ab_test_results` com timestamp e vencedor por modelo
+
+**Jobs consolidados**
+
+| Job | Composição | Execução |
+|-----|-----------|---------|
+| `[varejo-setup]` | setup + contract_registry | Manual (uma vez) |
+| `[varejo-pipeline]` | gold → features → feature_store → batch_scoring + contratos + observabilidade | Diário |
+| `[varejo-ml]` | features → demand_forecast + fraud_detector → ab_test | Sob demanda |
+
+---
+
 ## Estrutura do Repositório
 
 ```
@@ -292,7 +337,10 @@ brazilian-retail-lakehouse/
         ├── ml/
         │   ├── 07_feature_engineering.py # demand_features + fraud_features
         │   ├── 08_demand_forecast.py     # LightGBM Regressor + MLflow
-        │   └── 09_fraud_detector.py      # LightGBM Classifier + MLflow
+        │   ├── 09_fraud_detector.py      # LightGBM Classifier + MLflow
+        │   ├── 13_feature_store.py       # Documenta features no Unity Catalog
+        │   ├── 14_batch_scoring.py       # Scoring em batch → gold.demand/fraud_predictions
+        │   └── 15_ab_test.py             # Champion vs challenger → gold.ab_test_results
         └── observability/
             ├── 10_data_health.py         # Volume, freshness e nulos → observability.data_health
             ├── 11_sla_report.py          # SLA prometido vs entregue (queries analíticas)
@@ -377,24 +425,14 @@ docker run --rm \
 ```bash
 databricks bundle deploy
 
-# Etapa 1 — Fundação
-databricks bundle run setup           # executar uma única vez
-databricks bundle run gold_basic      # executar após o DLT pipeline
+# Setup inicial — executar uma única vez
+databricks bundle run varejo_setup        # infraestrutura + contratos de dados
 
-# Etapa 2 — Contratos de Dados
-databricks bundle run contract_registry   # executar ao criar/atualizar contratos
-databricks bundle run contract_validator  # executar após cada execução do DLT
-databricks bundle run contract_monitor    # dashboard de conformidade
+# Pipeline diário — gold, features, scoring, contratos e observabilidade
+databricks bundle run varejo_pipeline
 
-# Etapa 4 — Plataforma de ML
-databricks bundle run feature_engineering # demand_features + fraud_features
-databricks bundle run demand_forecast     # treina e registra no MLflow
-databricks bundle run fraud_detector      # treina e registra no MLflow
-
-# Etapa 5 — Observabilidade
-databricks bundle run data_health         # saúde das tabelas Silver
-databricks bundle run sla_report          # cumprimento dos SLAs
-databricks bundle run model_drift         # PSI das features dos modelos
+# Treinamento de modelos — executar ao atualizar os modelos
+databricks bundle run varejo_ml
 ```
 
 ---
